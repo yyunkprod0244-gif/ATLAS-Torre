@@ -1,0 +1,16 @@
+{
+  "name": "torre-apice",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Torre virtual da empresa: 8 andares de agentes e skills em 3D, com o assistente Jarvis.",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0"
+  }
+}

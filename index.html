@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#05070d">
+  <meta name="description" content="Torre de comando da empresa: 8 andares de agentes e skills em 3D, com o assistente Jarvis.">
+  <title>Torre de comando</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%2305070d%27/%3E%3Cpath fill=%27%23bfe6ff%27 d=%27M16 4l7 5v3H9V9zM9 14h14v3.4H9zM9 19.3h14v3.4H9zM9 24.6h14V28H9z%27/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/torre.css">
+</head>
+<body>
+  <canvas id="cena" aria-label="Torre em 3D com os 8 andares da empresa"></canvas>
+  <div id="rotulos" class="rotulos" aria-hidden="true"></div>
+
+  <header class="topo">
+    <div class="marca vidro">
+      <svg class="marca-logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3l7 5v3H9V8z"/><rect x="9" y="13" width="14" height="3.4" rx="1"/><rect x="9" y="18.3" width="14" height="3.4" rx="1"/><rect x="9" y="23.6" width="14" height="3.4" rx="1"/></svg>
+      <div class="marca-txt">
+        <button class="marca-nome" id="empresaNome" type="button" title="Clique para trocar o nome da empresa">ÁPICE</button>
+        <span class="marca-sub">Torre de comando</span>
+      </div>
+    </div>
+    <div class="placar vidro" id="placar" aria-label="Números gerais da empresa"></div>
+    <div class="util vidro">
+      <div class="relogio"><b id="relogioHora">--:--</b><span id="relogioData"></span></div>
+      <button class="bt" id="btResumo" type="button">Resumo do dia</button>
+      <button class="bt-icone" id="btQualidade" type="button" aria-label="Alternar qualidade dos gráficos" title="Qualidade dos gráficos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.4L20 9l-4.4 3.9L17 19l-5-3.2L7 19l1.4-6.1L4 9l5.8-.6z"/></svg></button>
+      <button class="bt-icone" id="btTela" type="button" aria-label="Tela cheia" title="Tela cheia"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+  </header>
+
+  <nav class="elevador vidro" id="elevador" aria-label="Andares da torre"><span class="cabine" id="cabine"></span></nav>
+
+  <aside class="painel vidro" id="painel" hidden aria-label="Painel do andar">
+    <header class="p-topo">
+      <div class="p-num" id="pNum">01</div>
+      <div class="p-tit"><h2 id="pTit"></h2><p id="pMissao"></p></div>
+      <button class="bt-icone" type="button" data-acao="fecharPainel" aria-label="Fechar painel e voltar para a torre"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="p-meta" id="pMeta"></div>
+    <div class="abas" id="pAbas" role="tablist"></div>
+    <div class="p-corpo" id="pCorpo"></div>
+    <div class="ficha" id="ficha" hidden></div>
+  </aside>
+
+  <section class="feed vidro" aria-label="Acontecimentos ao vivo">
+    <h2><span class="aovivo"><i></i>Mega Brain ao vivo</span></h2>
+    <ol id="feedLista"></ol>
+  </section>
+
+  <div class="jarvis" id="jarvis" data-estado="parado">
+    <section class="jv-painel vidro" id="jvPainel" hidden aria-label="Conversa com o Jarvis">
+      <header>
+        <div><b>JARVIS</b><span id="jvStatus">modo local</span></div>
+        <span class="jv-modo" id="jvModo">modo local</span>
+        <button class="bt-icone" id="jvVoz" type="button" aria-pressed="true" aria-label="Voz do Jarvis"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>
+        <button class="bt-icone" id="jvFechar" type="button" aria-label="Fechar conversa"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </header>
+      <div class="jv-msgs" id="jvMsgs" aria-live="polite"></div>
+      <div class="jv-chips" id="jvChips"></div>
+      <form class="jv-form" id="jvForm">
+        <button class="bt-icone jv-mic" id="jvMic" type="button" aria-label="Falar com o Jarvis" title="Falar (tecla M)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+        <input id="jvTexto" type="text" autocomplete="off" maxlength="300" placeholder="Pergunte ao Jarvis…" aria-label="Mensagem para o Jarvis">
+        <button class="bt-icone jv-enviar" type="submit" aria-label="Enviar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-7-6 16-3-6.5L4 12z"/></svg></button>
+      </form>
+    </section>
+    <button class="jv-orbe" id="jvOrbe" type="button" aria-expanded="false" aria-controls="jvPainel" title="Conversar com o Jarvis (tecla J)">
+      <canvas id="jvCanvas" width="72" height="72" aria-hidden="true"></canvas><span>JARVIS</span>
+    </button>
+  </div>
+
+  <div class="dica" id="dica" role="tooltip" hidden></div>
+  <div class="aviso" id="aviso" role="status" hidden></div>
+  <div class="modal" id="modal" hidden></div>
+
+  <div class="intro" id="intro">
+    <div class="intro-caixa">
+      <svg class="marca-logo grande" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3l7 5v3H9V8z"/><rect x="9" y="13" width="14" height="3.4" rx="1"/><rect x="9" y="18.3" width="14" height="3.4" rx="1"/><rect x="9" y="23.6" width="14" height="3.4" rx="1"/></svg>
+      <h1 id="introNome">ÁPICE</h1>
+      <p class="intro-sub">Torre de comando</p>
+      <p class="intro-totais" id="introTotais">8 andares</p>
+      <ul class="intro-log" id="introLog" aria-live="polite"></ul>
+      <div class="intro-trilho"><i id="introBarra"></i></div>
+      <button class="bt bt-grande" id="introEntrar" type="button" disabled>Preparando…</button>
+      <p class="intro-nota">Demonstração com dados simulados</p>
+    </div>
+  </div>
+
+  <noscript><p style="position:fixed;inset:0;display:grid;place-items:center;background:#05070d;color:#eef1f6;font-family:sans-serif">Ative o JavaScript para abrir a torre.</p></noscript>
+
+  <script src="js/config.js"></script>
+  <script src="js/dados.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/cena.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/jarvis.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    /* Carrega o motor 3D (Three.js): primeiro a cópia local em /vendor, que funciona
+       sem internet; abrindo o arquivo direto do disco (file://), usa a internet. */
+    (async function () {
+      var CDN = 'https://cdn.jsdelivr.net/npm/three@0.170.0/', base = CDN;
+      if (location.protocol !== 'file:') {
+        try { var r = await fetch('vendor/three/build/three.module.js', { method: 'HEAD' }); if (r.ok) base = './vendor/three/'; } catch (e) { /* usa a internet */ }
+      }
+      var mapa = document.createElement('script');
+      mapa.type = 'importmap';
+      mapa.textContent = JSON.stringify({ imports: { three: base + 'build/three.module.js', 'three/addons/': base + 'examples/jsm/' } });
+      document.head.appendChild(mapa);
+      var m = document.createElement('script');
+      m.type = 'module';
+      m.textContent = "import * as THREE from 'three';" +
+        "import { OrbitControls } from 'three/addons/controls/OrbitControls.js';" +
+        "import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';" +
+        "import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';" +
+        "import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';" +
+        "import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';" +
+        "import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';" +
+        "window.Torre.iniciar({ THREE, OrbitControls, EffectComposer, RenderPass, UnrealBloomPass, OutputPass, mergeGeometries });";
+      m.onerror = function () { window.Torre.iniciar(null); };
+      document.body.appendChild(m);
+      /* se o motor 3D não chegar, a interface abre mesmo assim */
+      setTimeout(function () { if (!window.Torre.pronto) { console.warn('[torre] motor 3D não carregou; abrindo sem a torre'); window.Torre.iniciar(null); } }, 12000);
+    })();
+  </script>
+</body>
+</html>
