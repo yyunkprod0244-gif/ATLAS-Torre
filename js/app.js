@@ -49,7 +49,10 @@
       aoOuvirResumo: function (r) { UI.fecharModal(); J.abrir(true); J.falar(r.fala); },
       aoOuvirTexto: function (texto) { J.abrir(true); J.falar(texto); }
     });
+    if (T.Oficina) T.Oficina.montar();   /* Central de Controle, clientes do site, instalar skills, eventos reais */
     J.montar({
+      abrirControle: T.Oficina && T.Oficina.abrirControle,
+      abrirClientes: T.Oficina && T.Oficina.abrirClientes,
       irPara: function (n) { if (n) UI.abrirAndar(n); else UI.fechar(); },
       irParaSala: function (n, k) { UI.abrirSala(n, k); },
       abrirLivro: function (id) { return UI.abrirLivro(id); },
@@ -96,6 +99,8 @@
       if (params.has('produtos')) setTimeout(UI.abrirProdutos, 600);
       if (params.has('skills')) setTimeout(UI.abrirSkillsExternas, 600);
       if (params.has('lembretes')) setTimeout(UI.abrirLembretes, 600);
+      if (params.has('controle') && T.Oficina) setTimeout(T.Oficina.abrirControle, 600);
+      if (params.has('clientes') && T.Oficina) setTimeout(T.Oficina.abrirClientes, 600);
       if (params.has('calculadora')) setTimeout(UI.abrirCalculadora, 600);
     }
 

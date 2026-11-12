@@ -1,2 +1,4 @@
 node_modules/
 .env
+# pasta de trabalho dos agentes quando não há disco S: (vídeos, contatos, tokens das redes)
+dados/

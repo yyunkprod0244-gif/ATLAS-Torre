@@ -36,6 +36,15 @@
     abrirLivro: function (id) { irTorre('#andar=9&livro=' + encodeURIComponent(id), 'Abrir o livro na torre'); return true; },
     abrirProdutos: function () { irTorre('&produtos', 'Ver os produtos na torre'); },
     abrirSkillsExternas: function () { irTorre('&skills', 'Ver o catálogo de skills na torre'); },
+    abrirControle: function () { irTorre('&controle', 'Abrir a Central de Controle na torre'); },
+    abrirClientes: function () { irTorre('&clientes', 'Ver os clientes do site na torre'); },
+    abrirPagina: function (p) {
+      setTimeout(function () {
+        var box = $('jvMsgs'), a = document.createElement('a');
+        a.className = 'jv-msg ir-torre'; a.href = p + '.html'; a.textContent = (p === 'estudio' ? 'Abrir o Estúdio' : 'Abrir a Publicação') + ' ›';
+        box.appendChild(a); box.scrollTop = box.scrollHeight;
+      }, 0);
+    },
     mostrarSkillExterna: function () { irTorre('&skills', 'Ver a skill no catálogo da torre'); },
     abrirLembretes: function () { irTorre('&lembretes', 'Gerenciar os lembretes na torre'); },
     abrirAgente: function (n) { irTorre('#andar=' + n, 'Ver o agente na torre'); }
@@ -110,6 +119,7 @@
     catch (e) { console.warn('[holograma] sem WebGL; usando a versão em CSS', e); return reserva(); }
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
+    T.vigiarContexto(canvas, function () { $('holoReserva').hidden = false; }, function () { $('holoReserva').hidden = true; });
 
     var CIANO = new THREE.Color(0x7fe4ff);
     function hdr(k) { return CIANO.clone().multiplyScalar(k); }
@@ -129,6 +139,7 @@
 
     var composer = new L.EffectComposer(renderer);
     composer.addPass(new L.RenderPass(scene, camera));
+    var limpo = T.passoLimpo(L); if (limpo) composer.addPass(limpo);
     var bloom = new L.UnrealBloomPass(new THREE.Vector2(4, 4), 1.0, 0.65, 0.08);
     composer.addPass(bloom);
     composer.addPass(new L.OutputPass());
@@ -195,7 +206,7 @@
       side: THREE.DoubleSide,
       uniforms: { uCor: { value: hdr(0.9) }, uForca: { value: 0.18 } },
       vertexShader: 'varying float vY; void main(){ vY = uv.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform vec3 uCor; uniform float uForca; varying float vY; void main(){ gl_FragColor = vec4(uCor, uForca * pow(1.0 - vY, 1.6)); }'
+      fragmentShader: 'uniform vec3 uCor; uniform float uForca; varying float vY; void main(){ gl_FragColor = vec4(uCor, uForca * pow(clamp(1.0 - vY, 0.0, 1.0), 1.6)); }'   /* pow de negativo = NaN em placas AMD */
     })));
     cone.position.y = 1.6; base.add(cone);
 

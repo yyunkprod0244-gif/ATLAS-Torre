@@ -69,6 +69,7 @@
   <script src="js/skills-externas.js"></script>
   <script src="js/ferramentas.js"></script>
   <script src="js/sim.js"></script>
+  <script src="js/fala.js"></script>
   <script src="js/jarvis.js"></script>
   <script src="js/holograma.js"></script>
   <script>
@@ -89,7 +90,8 @@
         "import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';" +
         "import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';" +
         "import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';" +
-        "window.Torre.Holograma.desenhar({ THREE, EffectComposer, RenderPass, UnrealBloomPass, OutputPass });";
+        "import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';" +
+        "window.Torre.Holograma.desenhar({ THREE, EffectComposer, RenderPass, UnrealBloomPass, OutputPass, ShaderPass });";
       m.onerror = function () { window.Torre.Holograma.desenhar(null); };
       document.body.appendChild(m);
       setTimeout(function () { window.Torre.Holograma.desenhar(null); }, 12000);   /* não chegou: holograma em CSS */

@@ -708,7 +708,9 @@
       '<h4>Precisa de</h4><p>' + esc(s.precisa) + '</p><h4>Como instalar</h4><pre class="ex-cmd">' + esc(s.instalar) + '</pre>' +
       '<p class="alerta aviso"><i aria-hidden="true">▲</i><span><b>Atenção:</b> ' + esc(s.atencao) + '</span></p></details>' +
       '<div class="ex-acoes"><a class="bt bt-mini" href="' + esc(T.linkDaSkill(s).url) + '" target="_blank" rel="noopener noreferrer">' + ico(ICO.externo) + esc(T.linkDaSkill(s).texto) + '</a>' +
-      (o.catalogo && l ? '<button class="bt bt-mini" type="button" data-ext="' + esc(s.id) + '">' + ico(ICO.alvo) + 'Ver na torre</button>' : '') + '</div></article>';
+      (o.catalogo && l ? '<button class="bt bt-mini" type="button" data-ext="' + esc(s.id) + '">' + ico(ICO.alvo) + 'Ver na torre</button>' : '') + '</div>' +
+      /* instalar / remover: preenchido por js/oficina.js com o estado do servidor */
+      '<div class="ex-inst" data-skill-inst="' + esc(s.id) + '"></div></article>';
   }
 
   /* catálogo completo (botão "Skills" do topo), agrupado por andar */
@@ -915,11 +917,12 @@
     var agora = Date.now();
     if (!filaFeed.length || agora - ultimoFeed < 1100) return;
     ultimoFeed = agora;
-    var e = filaFeed.filter(function (x) { return x.destaque; })[0] || filaFeed[filaFeed.length - 1];
-    filaFeed = [];
+    var e = filaFeed.filter(function (x) { return x.real; })[0] || filaFeed.filter(function (x) { return x.destaque; })[0] || filaFeed[filaFeed.length - 1];
+    /* eventos reais (o que os agentes fizeram no computador) não se perdem: saem um por vez */
+    filaFeed = filaFeed.filter(function (x) { return x.real && x !== e; });
     var ol = $('feedLista'), li = document.createElement('li'), de = T.andar(e.andar);
-    li.className = e.destaque ? 'forte' : '';
-    li.innerHTML = '<button type="button" data-ir="' + e.andar + '">' + ponto(de.cor) + '<span class="fd-txt"></span><time>' + F.hora(e.t) + '</time></button>';
+    li.className = e.real ? 'forte real' : e.destaque ? 'forte' : '';
+    li.innerHTML = '<button type="button" data-ir="' + e.andar + '">' + ponto(de.cor) + (e.real ? '<span class="fd-real" title="Aconteceu de verdade no seu computador">real</span>' : '') + '<span class="fd-txt"></span><time>' + F.hora(e.t) + '</time></button>';
     li.querySelector('.fd-txt').textContent = e.texto;
     ol.insertBefore(li, ol.firstChild);
     while (ol.children.length > 4) ol.removeChild(ol.lastChild);
@@ -1133,6 +1136,9 @@
     montar: montar, abrirAndar: abrirAndar, fechar: fechar, definirAba: definirAba, abrirAgente: abrirAgente, fecharFicha: fecharFicha,
     abrirSala: abrirSala, fecharSala: fecharSala, abrirLivro: abrirLivro, abrirProdutos: abrirProdutos, abrirSkillsExternas: abrirSkillsExternas, abrirLembretes: abrirLembretes, abrirCalculadora: abrirCalculadora, quandoTexto: quandoTexto, mostrarSkillExterna: mostrarSkillExterna,
     abrirResumo: abrirResumo, fecharModal: fecharModal, aviso: aviso, dicaCena: dicaCena,
+    /* usados por js/oficina.js (Central de Controle, clientes do site, instalar skills) */
+    abrirModal: abrirModal, ico: ico, ICO: ICO, ponto: ponto, modalAtual: function () { return modalAtual; },
+    eventoReal: function (e) { filaFeed.push(e); },
     andarAberto: function () { return andarAberto; }, salaAberta: function () { return salaAberta; }, fichaAberta: function () { return fichaAberta; }
   };
 })(window);

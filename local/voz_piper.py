@@ -30,6 +30,7 @@ args = parser.parse_args()
 voz = PiperVoice.load(args.voz)
 config = SynthesisConfig(length_scale=args.velocidade)
 trava = threading.Lock()  # o modelo atende um pedido por vez
+INICIO, ENTRE_FRASES, FIM = 0.25, 0.2, 0.12  # silêncios, em segundos
 chave = os.environ.get("JARVIS_VOZ_CHAVE", "")
 
 
@@ -60,10 +61,26 @@ class Pedido(BaseHTTPRequestHandler):
         texto = self.rfile.read(tamanho).decode("utf-8", "replace").strip()[:2000]
         if not texto:
             return self._responder(400, b"texto vazio")
-        saida = io.BytesIO()
         with trava:
-            with wave.open(saida, "wb") as arquivo:
-                voz.synthesize_wav(texto, arquivo, syn_config=config)
+            pedacos = list(voz.synthesize(texto, syn_config=config))
+        taxa = voz.config.sample_rate
+
+        def silencio(segundos):
+            return b"\x00\x00" * int(taxa * segundos)
+
+        saida = io.BytesIO()
+        with wave.open(saida, "wb") as arquivo:
+            arquivo.setnchannels(1)
+            arquivo.setsampwidth(2)
+            arquivo.setframerate(taxa)
+            # Fones Bluetooth e algumas placas de som "acordam" só quando o áudio começa
+            # e comem o primeiro pedaço da frase: um respiro no início evita isso.
+            arquivo.writeframes(silencio(INICIO))
+            for i, pedaco in enumerate(pedacos):
+                if i:
+                    arquivo.writeframes(silencio(ENTRE_FRASES))
+                arquivo.writeframes(pedaco.audio_int16_bytes)
+            arquivo.writeframes(silencio(FIM))
         self._responder(200, saida.getvalue(), "audio/wav")
 
     def log_message(self, *_):

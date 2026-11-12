@@ -170,4 +170,29 @@
     /* a frase parece uma conta? (para o Jarvis decidir se calcula) */
     pareceConta: function (expr) { var s = preparar(expr); return !!s && /[+\-*/^%]/.test(s.replace(/^\s*-/, '')); }
   };
+
+  /* ==========================================================================
+     3D: etapa de limpeza antes do brilho (bloom)
+     Um único pixel inválido (NaN ou infinito) vira um retângulo preto enorme
+     depois que o brilho desfoca a imagem em várias escalas. Isso acontece
+     sobretudo em placas AMD. Esta etapa zera esses pixels antes do brilho.
+     ======================================================================== */
+  T.passoLimpo = function (L) {
+    if (!L || !L.ShaderPass) return null;
+    return new L.ShaderPass({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      /* isnan() é apagado pelo compilador do Direct3D ("value cannot be NaN"); olhar os bits não é:
+         expoente todo em 1 = NaN ou infinito */
+      fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv;' +
+        ' bool ruim(float x){ return (floatBitsToUint(x) & 0x7F800000u) == 0x7F800000u; }' +
+        ' void main(){ vec4 c = texture2D(tDiffuse, vUv);' +
+        ' if (ruim(c.r) || ruim(c.g) || ruim(c.b) || ruim(c.a)) c = vec4(0.0); gl_FragColor = clamp(c, 0.0, 256.0); }'
+    });
+  };
+  /* se o driver da placa de vídeo reiniciar, o navegador derruba o 3D: avisa e deixa voltar sozinho */
+  T.vigiarContexto = function (canvas, aoPerder, aoVoltar) {
+    canvas.addEventListener('webglcontextlost', function (e) { e.preventDefault(); if (aoPerder) aoPerder(); });
+    canvas.addEventListener('webglcontextrestored', function () { if (aoVoltar) aoVoltar(); });
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -136,6 +136,13 @@
       return { texto: null, comando: true, info: original.slice(m[0].length).replace(/^[:\s]+/, '') };
     if ((m = t.match(/(?:mude|troque|altere|defina)\s+o nome da empresa para\s+(.+)/))) return { texto: null, comando: true, nome: original.slice(original.length - m[1].length) };
 
+    /* ---------- trabalho de verdade no computador: estúdio, publicação, Central de Controle, clientes ---------- */
+    if (/(par[ae]r?|deslig\w*|interromp\w*)\s+(todos\s+)?(os\s+)?agentes|^parar tudo|^pare tudo/.test(t)) return { texto: null, comando: true, pararAgentes: true, local: true };
+    if (/(central de controle|controle total|painel de controle|controle dos agentes|liber\w* (os |todos os )?agentes|o que os agentes (estao fazendo|fizeram)|pedidos? de aprovacao)/.test(t)) return { texto: null, comando: true, pagina: 'controle', local: true };
+    if (/(clientes do site|leads?\b|contatos do site|quem (deixou|mandou) (o )?contato|chat do site|atendimento do site)/.test(t)) return { texto: null, comando: true, pagina: 'clientes', local: true };
+    if (!/\bandar\b/.test(t) && /(estudio|edit\w* (o |um |os |meus )?videos?|envi\w* (um |o |meus )?videos?|sub\w* (um |o )?videos?|upload|meus videos|avali\w* (os |o )?videos?)/.test(t)) return { texto: null, comando: true, pagina: 'estudio', local: true };
+    if (!/\bandar\b/.test(t) && /(pagina de publicacao|publicacao automatica|publi\w* nas redes|agend\w* (os |o |um )?(posts?|videos?)|conect\w* (o |a |as )?(youtube|tiktok|instagram|facebook|linkedin|redes))/.test(t)) return { texto: null, comando: true, pagina: 'publicacao', local: true };
+
     /* ---------- skills externas (projetos do GitHub catalogados na torre) ---------- */
     if (T.SKILLS_EXTERNAS) {
       var ext = T.buscarSkillExterna(t);
@@ -294,6 +301,27 @@
   }
 
   /* ---------- produtos, salas e estudo ---------- */
+  /* páginas e painéis do trabalho real: Estúdio, Publicação, Central de Controle, clientes do site */
+  var PAGINAS = {
+    estudio: ['estudio.html', 'Abrindo o Estúdio: lá você envia os vídeos que grava, edita para as redes e avalia o que os agentes vão publicar.'],
+    publicacao: ['publicacao.html', 'Abrindo a Publicação: lá você conecta YouTube, TikTok, Instagram, Facebook e LinkedIn e acompanha a agenda de posts.'],
+    controle: [null, 'Abri a Central de Controle. Nela você decide o que cada departamento pode fazer sozinho no computador, aprova pedidos e vê o que eles fizeram.'],
+    clientes: [null, 'Abri os clientes do site: quem deixou nome e contato no atendimento do site de vendas.']
+  };
+  function abrirPagina(p, silencioso) {
+    var x = PAGINAS[p]; if (!x) return '';
+    if (p === 'controle' && cb.abrirControle) cb.abrirControle();
+    else if (p === 'clientes' && cb.abrirClientes) cb.abrirClientes();
+    else if (cb.abrirPagina) cb.abrirPagina(p);
+    else if (x[0]) setTimeout(function () { root.location.href = x[0]; }, silencioso ? 400 : 3500);   /* dá tempo de ouvir a resposta */
+    return silencioso ? '' : x[1];
+  }
+  function pararAgentes() {
+    root.fetch('/api/controle/parar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { if (!r.ok) throw new Error(); bolha('jarvis', 'Feito: todos os agentes foram desligados e o que estavam fazendo foi cancelado. Para religar, abra a Central de Controle.'); })
+      .catch(function () { bolha('jarvis', 'Não consegui falar com a torre para parar os agentes. Abra a Central de Controle e use “Parar tudo”.'); });
+    return 'Parando todos os agentes…';
+  }
   function mostrarProdutos() {
     var prods = (T.CATALOGO && T.CATALOGO.produtos) || [];
     if (cb.abrirProdutos) cb.abrirProdutos();
@@ -369,6 +397,7 @@
       else if (a.tipo === 'abrir_produtos' && cb.abrirProdutos) cb.abrirProdutos();
       else if (a.tipo === 'mostrar_skill_externa' && cb.mostrarSkillExterna) cb.mostrarSkillExterna(String(a.id));
       else if (a.tipo === 'criar_lembrete' && T.Lembretes) T.Lembretes.criar(a.texto, new Date(a.quando));
+      else if (a.tipo === 'abrir_pagina') abrirPagina(String(a.pagina), true);
     } catch (e) { console.error('[jarvis] ação falhou', a, e); }
   }
 
@@ -378,6 +407,8 @@
     if (r.reuniao) return marcar(r.reuniao);
     if (r.cancelar) return cancelar(r.cancelar);
     if (r.lembrete) return criarLembrete(r.lembrete);
+    if (r.pagina) return abrirPagina(r.pagina);
+    if (r.pararAgentes) return pararAgentes();
     if (r.verLembretes) return listarLembretes();
     if (r.externa !== undefined) return falarDeSkillExterna(r.externa);
     if (r.produtos) return mostrarProdutos();
@@ -487,8 +518,9 @@
   }
   if (sint) { escolherVoz(); if (sint.addEventListener) sint.addEventListener('voiceschanged', escolherVoz); }
 
-  /* deixa o texto natural para ser lido em voz alta */
+  /* deixa o texto natural para ser lido em voz alta (números, siglas e inglês: js/fala.js) */
   function paraFala(t) {
+    if (T.Fala) return T.Fala.paraFala(t);
     return t.replace(/R\$\s?([\d.]+(?:,\d+)?)\s?(mil|mi|bi)?/g, function (_, n, e) { return n + (e === 'mi' ? ' milhões de' : e === 'bi' ? ' bilhões de' : e ? ' mil' : '') + ' reais'; })
       .replace(/(\d)\s?mi\b/g, '$1 milhões').replace(/[«»“”"*#`]/g, '').replace(/×/g, ' com ').replace(/—|–/g, ', ')
       /* horários: "10:00" vira "10 horas" e "10:30" vira "10 e 30" (a voz leria "dez zero zero") */
@@ -539,6 +571,28 @@
     if (estado !== 'falando') definirEstado('falando');
     if (!tocandoVoz) tocarProxima();
   }
+  /* Um único canal de áudio (Web Audio) para todas as frases: com um <audio> por frase, fones
+     Bluetooth e algumas placas de som desligam entre uma frase e outra e comem o começo da próxima. */
+  var ctxAudio = null, fonteAtual = null;
+  function canalDeAudio() {
+    var AC = root.AudioContext || root.webkitAudioContext;
+    if (!AC) return null;
+    if (!ctxAudio) { try { ctxAudio = new AC(); } catch (e) { return null; } }
+    if (ctxAudio.state === 'suspended' && ctxAudio.resume) ctxAudio.resume().catch(function () { /* espera um clique */ });
+    return ctxAudio;
+  }
+  /* o navegador só libera o som depois de um clique ou tecla: abre o canal no primeiro toque */
+  if (root.addEventListener) ['pointerdown', 'keydown'].forEach(function (ev) { root.addEventListener(ev, function () { if (vozServidor) canalDeAudio(); }, { passive: true }); });
+  function tocarNoCanal(blob, fim, reserva) {
+    var ctx = canalDeAudio();
+    if (!ctx || ctx.state !== 'running' || !blob.arrayBuffer) return reserva();
+    blob.arrayBuffer().then(function (dados) { return ctx.decodeAudioData(dados); }).then(function (buf) {
+      var f = ctx.createBufferSource();
+      f.buffer = buf; f.connect(ctx.destination);
+      f.onended = function () { if (fonteAtual === f) fonteAtual = null; fim(); };
+      fonteAtual = f; f.start();
+    }).catch(reserva);
+  }
   function tocarProxima() {
     var item = filaVoz.shift();
     if (!item) { tocandoVoz = false; return; }
@@ -547,17 +601,22 @@
       if (item.g !== fala.ger) return;   /* a fala foi interrompida */
       function fim() { if (item.g !== fala.ger) return; audioAtual = null; fimDaFrase(item.g); tocarProxima(); }
       if (!blob) { if (sint) falarNoNavegador(item.frase, fim); else fim(); return; }   /* a voz local falhou: usa a do navegador */
-      var url = root.URL.createObjectURL(blob), a = new root.Audio(url);
-      audioAtual = a;
-      a.onended = a.onerror = function () { root.URL.revokeObjectURL(url); fim(); };
-      var tocou = a.play();
-      if (tocou && tocou.catch) tocou.catch(function () { root.URL.revokeObjectURL(url); fim(); });
+      tocarNoCanal(blob, fim, function () { if (item.g === fala.ger) tocarComAudio(blob, fim); });
     });
+  }
+  /* reserva: sem Web Audio, toca com um <audio> comum */
+  function tocarComAudio(blob, fim) {
+    var url = root.URL.createObjectURL(blob), a = new root.Audio(url);
+    audioAtual = a;
+    a.onended = a.onerror = function () { root.URL.revokeObjectURL(url); fim(); };
+    var tocou = a.play();
+    if (tocou && tocou.catch) tocou.catch(function () { root.URL.revokeObjectURL(url); fim(); });
   }
   function pararFala() {
     fala.ger++; fala.restam = 0; fala.aberta = false; fala.buf = '';
     if (sint) sint.cancel();
     filaVoz = []; tocandoVoz = false;
+    if (fonteAtual) { var f = fonteAtual; fonteAtual = null; f.onended = null; try { f.stop(); } catch (e) { /* já tinha parado */ } }
     if (audioAtual) { try { audioAtual.pause(); } catch (e) { /* já tinha parado */ } audioAtual = null; }
     if (estado === 'falando') definirEstado('parado');
   }

@@ -1,0 +1,94 @@
+/* ============================================================================
+   OFICINA NA TORRE — Central de Controle, clientes do site, instalar skills,
+   acontecimentos reais no feed (js/oficina.js). Usa as cores de css/torre.css.
+   ========================================================================== */
+.bt-controle { position: relative; border-color: color-mix(in srgb, var(--marca) 55%, transparent); background: color-mix(in srgb, var(--marca) 16%, transparent); }
+.bt-controle:hover { background: color-mix(in srgb, var(--marca) 28%, transparent); border-color: var(--marca); }
+.bt-controle .contador { top: -5px; right: -5px; }
+.ctl-ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--neutro); flex: none; }
+.ctl-ponto.automatico { background: var(--bom); box-shadow: 0 0 8px var(--bom); }
+.ctl-ponto.pedir { background: var(--atencao); }
+/* os 5 botões de página ficam só com ícone (o nome aparece ao passar o mouse) */
+@media (max-width: 1820px) {
+  .util a.bt { padding: 0 10px; }
+  .util a.bt span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+.feed li.real button { background: color-mix(in srgb, var(--bom) 9%, transparent); border-radius: 8px; }
+.fd-real { font: 600 9px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #05070d; background: var(--bom); padding: 3px 5px; border-radius: 4px; margin-right: 6px; flex: none; }
+.barra-prog { height: 6px; border-radius: 3px; background: var(--sup-3); overflow: hidden; }
+.barra-prog i { display: block; height: 100%; background: var(--gelo); border-radius: 3px; transition: width .4s ease; }
+
+/* ---------- Central de Controle ---------- */
+.modal-caixa.modal-controle { width: min(1080px, 100%); max-height: calc(100vh - 40px); --cor: var(--marca); }
+.ctl { display: flex; flex-direction: column; gap: 22px; }
+.ctl h3 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+.ctl h3 small { font: 500 11px var(--mono); color: var(--tinta-3); margin-left: 4px; }
+.ctl code, .modal-controle header code { font: 500 11.5px var(--mono); }
+.ctl-geral { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--marca) 45%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--marca) 9%, transparent); }
+.ctl-geral h3 { margin-bottom: 2px; }
+.ctl-geral p { font-size: 12.5px; color: var(--tinta-2); max-width: 520px; }
+.ctl-mestre { display: flex; gap: 8px; flex-wrap: wrap; }
+.ctl-duas { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; }
+.ctl-pedidos { display: flex; flex-direction: column; gap: 8px; }
+.ctl-pedidos li { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--sup-1); border: 1px solid color-mix(in srgb, var(--atencao) 40%, var(--linha)); }
+.ctl-pedidos li > div { flex: 1; min-width: 0; font-size: 12.5px; }
+.ctl-pedidos time, .ctl-ativ time { font: 400 11px var(--mono); color: var(--tinta-3); }
+.ctl-trab { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.ctl-trab small { color: var(--tinta-3); }
+.ctl-deps { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.ctl-dep { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--sup-1); border: 1px solid var(--linha); border-left: 3px solid var(--cor); }
+.ctl-dep-cab { display: flex; align-items: center; gap: 8px; }
+.ctl-dep-cab small { margin-left: auto; font: 500 11px var(--mono); color: var(--tinta-3); }
+.ctl-dep p { font-size: 12.5px; color: var(--tinta-2); line-height: 1.5; }
+.ctl-dep .ctl-usa { font-size: 11.5px; color: var(--tinta-3); }
+.seg { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border-radius: 10px; background: var(--plano); border: 1px solid var(--linha-forte); margin-top: auto; }
+.seg-op { height: 30px; padding: 0 8px; border-radius: 7px; font-size: 12px; color: var(--tinta-2); white-space: nowrap; }
+.seg-op:hover { color: var(--tinta-1); background: rgba(255, 255, 255, .06); }
+.seg-op.on { color: var(--tinta-1); font-weight: 600; background: var(--sup-3); box-shadow: inset 0 0 0 1px var(--linha-forte); }
+.seg-op.on.automatico { background: color-mix(in srgb, var(--bom) 30%, var(--sup-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bom) 70%, transparent); }
+.seg-op.on.pedir { background: color-mix(in srgb, var(--atencao) 24%, var(--sup-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--atencao) 60%, transparent); }
+.ctl-horarios p { font-size: 12.5px; color: var(--tinta-3); margin: -4px 0 10px; }
+.ctl-hform { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ctl-hform input { width: 120px; }
+.ctl-ativ { display: flex; flex-direction: column; gap: 2px; }
+.ctl-ativ li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: baseline; padding: 6px 4px; border-bottom: 1px solid var(--linha); font-size: 12.5px; }
+.ctl-ativ li p { color: var(--tinta-2); }
+.ctl-ativ li b { color: var(--tinta-1); font-weight: 600; }
+.ctl-limites { font-size: 12.5px; color: var(--tinta-2); }
+.ctl-limites summary { cursor: pointer; color: var(--tinta-1); }
+.ctl-limites ul { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; padding-left: 16px; list-style: disc; }
+
+/* ---------- clientes do site ---------- */
+.modal-caixa.modal-clientes { width: min(820px, 100%); --cor: var(--a2); }
+.leads { display: flex; flex-direction: column; gap: 10px; }
+.lead { padding: 12px 14px; border-radius: 12px; background: var(--sup-1); border: 1px solid var(--linha); border-left: 3px solid var(--a2); display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.lead.fechado { border-left-color: var(--bom); }
+.lead.perdido { border-left-color: var(--neutro); opacity: .75; }
+.lead.em-contato { border-left-color: var(--atencao); }
+.lead-cab { display: flex; align-items: center; gap: 8px; }
+.lead-cab time { margin-left: auto; font: 400 11px var(--mono); color: var(--tinta-3); }
+.lead-contato a { color: var(--gelo); display: inline-flex; align-items: center; gap: 4px; }
+.lead-contato a .ico { width: 13px; height: 13px; }
+.lead-msg { color: var(--tinta-2); }
+.lead details summary { cursor: pointer; font-size: 12px; color: var(--tinta-3); }
+.lead-conversa { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--tinta-2); }
+.lead-conversa li.de-atlas { color: var(--tinta-3); }
+.lead-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--tinta-3); }
+.lead-status select { width: auto; height: 30px; }
+
+/* ---------- instalar skills ---------- */
+.ex-inst { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; }
+.ex-inst:empty { display: none; }
+.ex-inst-prog { display: flex; flex-direction: column; gap: 4px; width: 100%; font-size: 11.5px; color: var(--tinta-2); }
+.ex-inst-ok { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11.5px; color: var(--tinta-2); }
+.ex-inst-ok .ico { width: 14px; height: 14px; color: var(--bom); }
+.ex-inst-ok code { font: 500 11px var(--mono); overflow-wrap: anywhere; }
+.ex-inst-nota, .ex-inst-limpo { font-size: 11.5px; color: var(--tinta-3); }
+.ex-inst-erro { font-size: 12px; color: var(--critico); }
+.ex-alertas { font-size: 11.5px; color: var(--tinta-2); width: 100%; }
+.ex-alertas summary { cursor: pointer; }
+.ex-alertas.serio summary { color: var(--atencao); font-weight: 600; }
+.ex-alertas ul { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.ex-alertas code { font: 500 10.5px var(--mono); overflow-wrap: anywhere; }
+.ex-alertas pre { margin: 2px 0 0; font: 400 10.5px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--tinta-3); }
+@media (max-width: 900px) { .ctl-duas { grid-template-columns: 1fr; } }

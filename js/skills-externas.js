@@ -75,14 +75,14 @@
 
     {
       id: 'piper', nome: 'Piper (voz brasileira)', repo: 'OHF-Voice/piper1-gpl',
-      instalado: 'S:\\JarvisLocal\\piper (vozes jeff e cadu, licença CC0)',
+      instalado: 'S:\\JarvisLocal\\piper (vozes cadu e jeff, licença CC0)',
       andar: 'video', sala: 'Áudio', chaves: ['piper', 'voz brasileira', 'piper tts'],
       tipo: 'Voz sintética local (Python)', licenca: 'GPL-3.0 (cada voz tem a sua licença)',
       resumo: 'Transforma texto em fala no seu próprio computador, rápido e sem internet. Tem vozes em português do Brasil: cadu, edresson, faber e jeff.',
-      uso: 'Já é a voz do Jarvis (voz jeff; a cadu é a alternativa), melhor que a do navegador. Também serve para narrar vídeos e anúncios em português. Faz parte do kit "Jarvis local".',
-      faz: ['pip install piper-tts: instala o programa', 'python3 -m piper.download_voices pt_BR-jeff-medium: baixa uma voz brasileira (jeff e cadu são CC0, uso livre)', 'python3 -m piper -m pt_BR-jeff-medium -f fala.wav -- "Olá!": gera o áudio', 'Funciona sem internet depois de baixar a voz'],
+      uso: 'Já é a voz do Jarvis (voz cadu, a mais clara nos testes; a jeff é a alternativa), melhor que a do navegador. Também serve para narrar vídeos e anúncios em português. Faz parte do kit "Jarvis local".',
+      faz: ['pip install piper-tts: instala o programa', 'python3 -m piper.download_voices pt_BR-cadu-medium: baixa uma voz brasileira (jeff e cadu são CC0, uso livre)', 'python3 -m piper -m pt_BR-cadu-medium -f fala.wav -- "Olá!": gera o áudio', 'Funciona sem internet depois de baixar a voz'],
       precisa: 'Python 3. Cada voz ocupa algumas dezenas de megabytes.',
-      instalar: 'pip install piper-tts\npython3 -m piper.download_voices pt_BR-jeff-medium',
+      instalar: 'pip install piper-tts\npython3 -m piper.download_voices pt_BR-cadu-medium',
       atencao: 'O projeto antigo (rhasspy/piper) foi arquivado em outubro de 2025; use o novo, OHF-Voice/piper1-gpl. O Piper não dá licença sobre as vozes: antes de usar uma voz em vídeo de cliente, leia o MODEL_CARD dela, porque algumas têm uso restrito.'
     },
 

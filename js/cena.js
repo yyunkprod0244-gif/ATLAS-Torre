@@ -44,6 +44,7 @@
     var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.2;
+    if (T.vigiarContexto) T.vigiarContexto(canvas);   /* deixa o 3D voltar sozinho se o driver reiniciar */
     var aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
     var scene = new THREE.Scene();
@@ -65,6 +66,7 @@
     var alvoRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
     var composer = new L.EffectComposer(renderer, alvoRT);
     composer.addPass(new L.RenderPass(scene, camera));
+    if (T.passoLimpo) { var limpo = T.passoLimpo(L); if (limpo) composer.addPass(limpo); }
     var bloom = new L.UnrealBloomPass(new THREE.Vector2(4, 4), 0.6, 0.6, 0.22);
     composer.addPass(bloom);
     composer.addPass(new L.OutputPass());
@@ -143,9 +145,11 @@
         'void main(){',
         '  float r = length(vXZ);',
         '  float g1 = r / 4.0;',
-        '  float anel = 1.0 - min(abs(fract(g1 - 0.5) - 0.5) / fwidth(g1), 1.0);',
-        '  float g2 = atan(vXZ.y, vXZ.x) / 0.2617994;',
-        '  float raio = (1.0 - min(abs(fract(g2 - 0.5) - 0.5) / fwidth(g2), 1.0)) * step(13.0, r);',
+        /* fwidth pode ser zero e atan(0, 0) é indefinido: os dois geram NaN, que o brilho espalha em blocos pretos */
+        '  float anel = 1.0 - min(abs(fract(g1 - 0.5) - 0.5) / max(fwidth(g1), 1e-5), 1.0);',
+        '  float g2 = atan(vXZ.y, abs(vXZ.x) + abs(vXZ.y) > 1e-4 ? vXZ.x : 1.0) / 0.2617994;',
+        '  float fw2 = max(fwidth(g2), 1e-5);',
+        '  float raio = r > 13.0 ? 1.0 - min(abs(fract(g2 - 0.5) - 0.5) / fw2, 1.0) : 0.0;',
         '  float some = smoothstep(150.0, 14.0, r);',
         '  vec3 c = uFundo + uCor * (max(anel, raio) * 0.20 * some + exp(-r * 0.05) * 0.30);',
         '  gl_FragColor = vec4(c, 1.0);',
@@ -666,19 +670,101 @@
     var geoToque = new THREE.CylinderGeometry(R + 0.6, R + 0.6, H, 20);
     var matToque = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
     var geoColuna = new THREE.CylinderGeometry(0.05, 0.05, H - 0.32, 6);
-    var corpo = new THREE.CylinderGeometry(0.085, 0.125, 0.32, 6); corpo.translate(0, 0.16, 0);
-    var cabeca = new THREE.SphereGeometry(0.098, 8, 6); cabeca.translate(0, 0.43, 0);
-    var geoAgente = L.mergeGeometries([corpo, cabeca]);
-    /* sombreado fixo, gravado no boneco: dá volume de perto sem custar nada (os bonecos não usam as luzes da cena) */
-    (function () {
-      var nrm = geoAgente.attributes.normal, n = nrm.count, c = new Float32Array(n * 3), lx = 0.33, ly = 0.8, lz = 0.5;
-      for (var i = 0; i < n; i++) {
-        var f = 0.62 + 0.38 * Math.max(0, Math.min(1, (nrm.getX(i) * lx + nrm.getY(i) * ly + nrm.getZ(i) * lz) * 0.6 + 0.5));
-        c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = f;
+    /* ==========================================================================
+       OS AGENTES: bonecos com roupa
+       Cabelo, cabeça, pescoço, camisa, braços, mãos, calça e sapatos. A camisa
+       tem a cor do setor (e muda de brilho conforme o estado do agente); pele e
+       cabelo variam de pessoa para pessoa. Duas poses: sentado na estação de
+       trabalho (mãos no teclado) e em pé, para quem circula pela sala.
+       Modelados olhando para -Z, com os pés no chão (y = 0), como a estação.
+       Cada vértice diz de que parte é: 0 cor fixa (calça, sapato) · 1 camisa
+       (cor da instância) · 2 pele · 3 cabelo (cores por agente, em atributos).
+       ======================================================================== */
+    var CALCA = new THREE.Color().setRGB(0.17, 0.2, 0.29, THREE.SRGBColorSpace), SAPATO = new THREE.Color().setRGB(0.06, 0.06, 0.07, THREE.SRGBColorSpace), BRANCA = new THREE.Color(1, 1, 1);
+    var vA = new THREE.Vector3(), vB = new THREE.Vector3(), qT = new THREE.Quaternion(), mT = new THREE.Matrix4(), CIMA = new THREE.Vector3(0, 1, 0), UM = new THREE.Vector3(1, 1, 1);
+    function parteBoneco(lista, g, parte, cor) {
+      g.deleteAttribute('uv');
+      var n = g.attributes.position.count, c = new Float32Array(n * 3), p = new Float32Array(n), base = parte === 0 ? (cor || CALCA) : BRANCA;
+      for (var i = 0; i < n; i++) { c[i * 3] = base.r; c[i * 3 + 1] = base.g; c[i * 3 + 2] = base.b; p[i] = parte; }
+      g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.setAttribute('parte', new THREE.BufferAttribute(p, 1));
+      lista.push(g);
+    }
+    function bloco(l, w, h, d, x, y, z, parte, cor) { var g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); parteBoneco(l, g, parte, cor); }
+    /* caixa esticada entre dois pontos (braços) */
+    function membro(l, a, b, w, parte) {
+      vA.fromArray(a); vB.fromArray(b);
+      var dir = vB.clone().sub(vA), g = new THREE.BoxGeometry(w, dir.length(), w);
+      qT.setFromUnitVectors(CIMA, dir.normalize()); mT.compose(vA.clone().add(vB).multiplyScalar(0.5), qT, UM); g.applyMatrix4(mT);
+      parteBoneco(l, g, parte);
+    }
+    function tronco(l, rTopo, rBase, h, x, y, z, parte, achata) { var g = new THREE.CylinderGeometry(rTopo, rBase, h, 8); g.scale(1, 1, achata || 1); g.translate(x, y, z); parteBoneco(l, g, parte); }
+    function cabecaBoneco(l, x, y, z) {
+      tronco(l, 0.026, 0.03, 0.05, x, y - 0.075, z, 2);                                            /* pescoço */
+      var c = new THREE.SphereGeometry(0.07, 10, 8); c.scale(1, 1.1, 1); c.translate(x, y, z); parteBoneco(l, c, 2);   /* cabeça */
+      var h = new THREE.SphereGeometry(0.077, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5); h.scale(1, 1.08, 1); h.rotateX(0.32); h.translate(x, y + 0.006, z + 0.006);
+      parteBoneco(l, h, 3);                                                                          /* cabelo: topo, deixando a testa à mostra */
+      bloco(l, 0.135, 0.08, 0.04, x, y - 0.022, z + 0.052, 3);                                       /* cabelo: nuca */
+    }
+    function boneco(sentado) {
+      var l = [];
+      [-1, 1].forEach(function (s) {
+        if (sentado) {
+          bloco(l, 0.062, 0.055, 0.17, s * 0.04, 0.135, -0.06, 0);                                 /* coxa */
+          bloco(l, 0.055, 0.12, 0.055, s * 0.04, 0.075, -0.15, 0);                                 /* canela */
+          bloco(l, 0.06, 0.03, 0.09, s * 0.04, 0.015, -0.175, 0, SAPATO);
+          membro(l, [s * 0.1, 0.33, 0.03], [s * 0.112, 0.235, -0.035], 0.046, 1);                  /* braço (manga) */
+          membro(l, [s * 0.112, 0.235, -0.035], [s * 0.066, 0.268, -0.185], 0.038, 2);             /* antebraço */
+          bloco(l, 0.036, 0.022, 0.046, s * 0.06, 0.271, -0.205, 2);                               /* mão no teclado */
+        } else {
+          bloco(l, 0.06, 0.03, 0.09, s * 0.04, 0.015, -0.015, 0, SAPATO);
+          bloco(l, 0.06, 0.22, 0.06, s * 0.04, 0.14, 0, 0);                                        /* perna */
+          membro(l, [s * 0.105, 0.47, 0], [s * 0.12, 0.37, 0.012], 0.046, 1);
+          membro(l, [s * 0.12, 0.37, 0.012], [s * 0.12, 0.272, -0.008], 0.038, 2);
+          bloco(l, 0.034, 0.046, 0.03, s * 0.12, 0.246, -0.008, 2);                                /* mão */
+        }
+      });
+      var y0 = sentado ? 0 : 0.13, z0 = sentado ? 0.025 : 0;
+      bloco(l, 0.15, 0.065, sentado ? 0.13 : 0.1, 0, 0.135 + y0, z0 - (sentado ? 0.005 : 0), 0);   /* quadril */
+      tronco(l, 0.094, 0.08, 0.2, 0, 0.26 + y0, z0, 1, 0.72);                                      /* camisa */
+      cabecaBoneco(l, 0, 0.445 + y0, z0);
+      var g = L.mergeGeometries(l);
+      /* sombreado fixo, gravado no boneco: dá volume de perto sem custar nada (os bonecos não usam as luzes da cena) */
+      var nrm = g.attributes.normal, col = g.attributes.color;
+      for (var i = 0; i < nrm.count; i++) {
+        var f = 0.6 + 0.4 * Math.max(0, Math.min(1, (nrm.getX(i) * 0.33 + nrm.getY(i) * 0.8 + nrm.getZ(i) * 0.5) * 0.6 + 0.5));
+        col.setXYZ(i, col.getX(i) * f, col.getY(i) * f, col.getZ(i) * f);
       }
-      geoAgente.setAttribute('color', new THREE.BufferAttribute(c, 3));
-    })();
+      return g;
+    }
+    var geoSentado = boneco(true), geoEmPe = boneco(false);
+    /* tons de pele e cores de cabelo (sRGB), sorteados por agente */
+    var PELES = [[0.98, 0.84, 0.71], [0.94, 0.76, 0.6], [0.84, 0.62, 0.45], [0.7, 0.49, 0.33], [0.53, 0.35, 0.22], [0.38, 0.25, 0.16]].map(function (c) { return new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace); });
+    var CABELOS = [[0.05, 0.045, 0.04, 30], [0.17, 0.1, 0.06, 28], [0.33, 0.2, 0.11, 17], [0.75, 0.6, 0.33, 10], [0.55, 0.22, 0.1, 6], [0.62, 0.62, 0.64, 9]].map(function (c) { return { cor: new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace), peso: c[3] }; });
+    function vestir(geo, def, indices) {
+      var n = indices.length, pele = new Float32Array(n * 3), cab = new Float32Array(n * 3), total = CABELOS.reduce(function (s, c) { return s + c.peso; }, 0);
+      indices.forEach(function (ai, j) {
+        var r = T.rng('boneco:' + def.id + ':' + ai), p = PELES[Math.floor(r() * PELES.length)], x = r() * total, c = CABELOS[0];
+        for (var k = 0; k < CABELOS.length; k++) { if (x < CABELOS[k].peso) { c = CABELOS[k]; break; } x -= CABELOS[k].peso; }
+        pele[j * 3] = p.r; pele[j * 3 + 1] = p.g; pele[j * 3 + 2] = p.b;
+        cab[j * 3] = c.cor.r; cab[j * 3 + 1] = c.cor.g; cab[j * 3 + 2] = c.cor.b;
+      });
+      geo.setAttribute('pele', new THREE.InstancedBufferAttribute(pele, 3));
+      geo.setAttribute('cabelo', new THREE.InstancedBufferAttribute(cab, 3));
+      return geo;
+    }
+    /* a cor de cada instância pinta só a camisa; pele e cabelo vêm dos atributos de cada agente */
     var matAgente = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true });
+    matAgente.onBeforeCompile = function (s) {
+      s.vertexShader = 'attribute float parte;\nattribute vec3 pele;\nattribute vec3 cabelo;\n' + s.vertexShader.replace('#include <color_vertex>', [
+        'vColor = vec3(1.0);',
+        '#ifdef USE_COLOR', '  vColor = color.rgb;', '#endif',
+        'vec3 tinta = vec3(1.0);',
+        '#ifdef USE_INSTANCING_COLOR', '  if (parte > 0.5 && parte < 1.5) tinta = instanceColor.rgb;', '#endif',
+        'if (parte > 1.5 && parte < 2.5) tinta = pele;',
+        'if (parte > 2.5) tinta = cabelo;',
+        'vColor *= tinta;'].join('\n'));
+    };
+    matAgente.customProgramCacheKey = function () { return 'boneco-1'; };
     var toques = [];
 
     var andares = ANDARES.map(function (def, i) {
@@ -749,14 +835,21 @@
       var mobilia = new THREE.Mesh(pecas.length ? L.mergeGeometries(pecas) : new THREE.BufferGeometry(), matMobilia);
       mobilia.visible = false; g.add(mobilia);
 
-      var mesh = new THREE.InstancedMesh(geoAgente, matAgente, def.agentes.length);
+      /* todos os agentes sentados (índice = agente); quem circula vai também para a malha "em pé",
+         e na sentada fica com escala zero enquanto anda */
+      var todos = def.agentes.map(function (ag, j) { return j; }), quemAnda = def.agentes.filter(function (ag) { return ag.movel; }).map(function (ag) { return ag.i; });
+      var mesh = new THREE.InstancedMesh(vestir(geoSentado.clone(), def, todos), matAgente, def.agentes.length);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       g.add(mesh);
+      var meshPe = new THREE.InstancedMesh(vestir(geoEmPe.clone(), def, quemAnda), matAgente, Math.max(1, quemAnda.length));
+      meshPe.instanceMatrix.setUsage(THREE.DynamicDrawUsage); meshPe.frustumCulled = false; meshPe.count = quemAnda.length;
+      g.add(meshPe);
+      var posPe = {}; quemAnda.forEach(function (ai, j) { posPe[ai] = j; });
 
       var toque = new THREE.Mesh(geoToque, matToque); toque.position.y = H / 2; toque.userData.andar = i; g.add(toque); toques.push(toque);
 
       var o = {
-        def: def, g: g, cor: cor, matAro: matAro, matVidro: matVidro, aroTopo: aroTopo, agentes: mesh, estacoes: estacoes, telas: telas, mobilia: mobilia, teloes: teloes,
+        def: def, g: g, cor: cor, matAro: matAro, matVidro: matVidro, aroTopo: aroTopo, agentes: mesh, agentesPe: meshPe, posPe: posPe, estacoes: estacoes, telas: telas, mobilia: mobilia, teloes: teloes,
         escala: new Float32Array(def.agentes.length).fill(1),
         moveis: def.agentes.filter(function (ag) { return ag.movel; }).map(function (ag) { return ag.i; }),
         /* até onde quem circula pode ir sem atravessar as paredes da própria sala */
@@ -791,23 +884,38 @@
       var ag = a.def.agentes[i];
       return alvo.copy(a.cor).multiplyScalar(ag.movel && !calmo ? 0.12 : (BRILHO_TELA[ag.status] || 0.5));
     }
+    /* cor da camisa nas duas malhas (sentados e em pé) */
+    function corDaCamisa(a, i, cor) {
+      a.agentes.setColorAt(i, cor); a.agentes.instanceColor.needsUpdate = true;
+      var j = a.posPe[i]; if (j != null) { a.agentesPe.setColorAt(j, cor); a.agentesPe.instanceColor.needsUpdate = true; }
+    }
+    function marcarPosicoes(a) { a.agentes.instanceMatrix.needsUpdate = true; a.agentesPe.instanceMatrix.needsUpdate = true; }
     function pintar(a, i) {
-      a.agentes.setColorAt(i, corAgente(a, i, corTmp)); a.agentes.instanceColor.needsUpdate = true;
+      corDaCamisa(a, i, corAgente(a, i, corTmp));
       a.telas.setColorAt(i, corTela(a, i, corTmp)); a.telas.instanceColor.needsUpdate = true;
     }
     function posicionar(a, i, t) {
-      var ag = a.def.agentes[i], x = ag.x, z = ag.z, y = PISO + ASSENTO;   /* sentado na cadeira */
-      if (ag.movel && !calmo) {
-        /* quem circula caminha pelo vão atrás da própria fileira, sem sair da sala */
-        var ang = ag.ang + Math.sin(t * 0.32 + ag.fase) * a.vai[i], raio = ag.raio + 0.22;
-        x = Math.cos(ang) * raio; z = Math.sin(ang) * raio; y = PISO;
+      var ag = a.def.agentes[i], j = a.posPe[i], anda = ag.movel && !calmo;
+      if (anda) {
+        /* quem circula caminha pelo vão atrás da própria fileira, sem sair da sala, olhando para onde vai */
+        var fase = t * 0.32 + ag.fase, ang = ag.ang + Math.sin(fase) * a.vai[i], raio = ag.raio + 0.22;
+        dummy.position.set(Math.cos(ang) * raio, PISO, Math.sin(ang) * raio);
+        dummy.rotation.set(0, Math.cos(fase) >= 0 ? Math.PI - ang : -ang, 0);
+        dummy.scale.setScalar(a.escala[i]); dummy.updateMatrix();
+        a.agentesPe.setMatrixAt(j, dummy.matrix);
+        dummy.scale.setScalar(0); dummy.updateMatrix(); a.agentes.setMatrixAt(i, dummy.matrix);
+      } else {
+        /* sentado na cadeira, de frente para a mesa (a mesma rotação da estação de trabalho) */
+        dummy.position.set(ag.x, PISO, ag.z); dummy.rotation.set(0, Math.PI / 2 - ag.ang, 0);
+        dummy.scale.setScalar(a.escala[i]); dummy.updateMatrix();
+        a.agentes.setMatrixAt(i, dummy.matrix);
+        if (j != null) { dummy.scale.setScalar(0); dummy.updateMatrix(); a.agentesPe.setMatrixAt(j, dummy.matrix); }
       }
-      dummy.position.set(x, y, z); dummy.scale.setScalar(a.escala[i]); dummy.updateMatrix();
-      a.agentes.setMatrixAt(i, dummy.matrix);
+      dummy.rotation.set(0, 0, 0);
     }
     andares.forEach(function (a) {
-      for (var i = 0; i < a.def.agentes.length; i++) { posicionar(a, i, 0); a.agentes.setColorAt(i, corAgente(a, i, corTmp)); a.telas.setColorAt(i, corTela(a, i, corTmp)); }
-      a.agentes.instanceMatrix.needsUpdate = true; a.agentes.instanceColor.needsUpdate = true; a.telas.instanceColor.needsUpdate = true;
+      for (var i = 0; i < a.def.agentes.length; i++) { posicionar(a, i, 0); pintar(a, i); }
+      marcarPosicoes(a);
       a.agentes.computeBoundingSphere();
     });
 
@@ -1107,8 +1215,9 @@
       if (a) {
         if (a.peca && a.peca.livros) { hits = raio.intersectObjects(a.peca.livros, false); if (hits.length) livro = hits[0].object.userData.livro; }
         if (livro < 0 && sala >= 0) {
-          hits = raio.intersectObject(a.agentes, false);
-          if (hits.length && hits[0].instanceId != null) novo = { a: a, i: hits[0].instanceId };
+          hits = raio.intersectObjects([a.agentes, a.agentesPe], false);
+          /* na malha "em pé", o número da instância vira o número do agente */
+          if (hits.length && hits[0].instanceId != null) novo = { a: a, i: hits[0].object === a.agentesPe ? a.moveis[hits[0].instanceId] : hits[0].instanceId };
         }
         if (livro < 0 && !novo) {
           var o = raio.ray.origin, d = raio.ray.direction, dist = d.y < -0.0001 ? (a.g.position.y + PISO - o.y) / d.y : -1;
@@ -1124,8 +1233,8 @@
       salaSob = novaSala >= 0 ? novaSala : -1;
       if ((novo && (!destaque || destaque.a !== novo.a || destaque.i !== novo.i)) || (!novo && destaque)) {
         var antigo = destaque; destaque = novo;
-        if (antigo) { antigo.a.escala[antigo.i] = 1; pintar(antigo.a, antigo.i); posicionar(antigo.a, antigo.i, tAgora); antigo.a.agentes.instanceMatrix.needsUpdate = true; }
-        if (novo) { novo.a.escala[novo.i] = 1.7; pintar(novo.a, novo.i); posicionar(novo.a, novo.i, tAgora); novo.a.agentes.instanceMatrix.needsUpdate = true; }
+        if (antigo) { antigo.a.escala[antigo.i] = 1; pintar(antigo.a, antigo.i); posicionar(antigo.a, antigo.i, tAgora); marcarPosicoes(antigo.a); }
+        if (novo) { novo.a.escala[novo.i] = 1.7; pintar(novo.a, novo.i); posicionar(novo.a, novo.i, tAgora); marcarPosicoes(novo.a); }
       }
       passandoAndar = andarSob;
       canvas.style.cursor = novo || andarSob >= 0 || salaSob >= 0 || livro >= 0 ? 'pointer' : '';
@@ -1218,7 +1327,7 @@
         if (a.peca) a.peca.atualizar(t, dt);
         if (!calmo && a.moveis.length) {
           for (var m = 0; m < a.moveis.length; m++) posicionar(a, a.moveis[m], t);
-          a.agentes.instanceMatrix.needsUpdate = true;
+          marcarPosicoes(a);
         }
       }
 
@@ -1229,8 +1338,8 @@
         if (!sobPonteiro) {
           p.a.escala[p.i] = 1 + s * 1.3;
           posicionar(p.a, p.i, t);
-          p.a.agentes.setColorAt(p.i, corAgente(p.a, p.i, corTmp).lerp(BRANCO, s * 0.9));
-          p.a.agentes.instanceMatrix.needsUpdate = true; p.a.agentes.instanceColor.needsUpdate = true;
+          corDaCamisa(p.a, p.i, corAgente(p.a, p.i, corTmp).lerp(BRANCO, s * 0.9));
+          marcarPosicoes(p.a);
         }
         if (fim) pulsos.splice(i, 1);
       }

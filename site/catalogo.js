@@ -21,6 +21,12 @@
       slogan: 'Sites que vendem'
     },
 
+    /* Endereço da torre que atende o chat do site (os agentes de Vendas). Vazio = o mesmo
+       endereço do site, como quando o site abre pela torre (http://localhost:5173/site/).
+       Com o site hospedado na internet, coloque aqui o endereço público da torre
+       (por exemplo, um túnel do Cloudflare) e esse endereço em SITE_ORIGENS no .env. */
+    atendimento: '',
+
     contato: {
       whatsapp: '',    /* só números, com país e DDD. Ex.: 5511999998888 */
       email: '',       /* ex.: contato@suaempresa.com.br */

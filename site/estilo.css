@@ -425,3 +425,47 @@ body:has(.aviso-dono) .nav:not(.rolou) { top: var(--aviso-h, 0); }
   .janela { transform: none; }
   .celular { transform: none; }
 }
+
+/* ==========================================================================
+   ATENDIMENTO (chat com os agentes de Vendas) — site/atendimento.js
+   ======================================================================== */
+.atd-botao { position: fixed; z-index: 80; right: 20px; bottom: 20px; display: flex; align-items: center; gap: 10px; height: 54px; padding: 0 22px 0 18px; border-radius: 999px; color: #fff; font: 600 15px var(--fonte-t); background: linear-gradient(135deg, var(--roxo-500), var(--roxo-700)); box-shadow: 0 12px 34px rgba(95, 39, 201, .45); transition: transform .2s, box-shadow .2s; }
+.atd-botao:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(95, 39, 201, .55); }
+.atd-botao svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.atd-botao.aberto span { display: none; }
+.atd-painel { position: fixed; z-index: 80; right: 20px; bottom: 86px; width: min(380px, calc(100vw - 32px)); height: min(560px, calc(100vh - 120px)); display: flex; flex-direction: column; background: #fff; color: var(--tinta); border-radius: 22px; box-shadow: 0 24px 70px rgba(21, 7, 48, .4); overflow: hidden; animation: atdEntra .22s ease; }
+@keyframes atdEntra { from { opacity: 0; transform: translateY(10px); } }
+.atd-cab { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; color: #fff; background: linear-gradient(135deg, var(--roxo-600), var(--roxo-900)); }
+.atd-cab div { flex: 1; display: flex; flex-direction: column; line-height: 1.25; }
+.atd-cab b { font: 600 15px var(--fonte-t); }
+.atd-cab small { font-size: 12px; opacity: .8; }
+.atd-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: rgba(255, 255, 255, .18); font: 700 16px var(--fonte-t); }
+.atd-fechar { width: 34px; height: 34px; border-radius: 10px; font-size: 24px; line-height: 1; color: #fff; }
+.atd-fechar:hover { background: rgba(255, 255, 255, .14); }
+.atd-msgs { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: linear-gradient(180deg, var(--roxo-50), #fff 40%); }
+.atd-msg { max-width: 86%; padding: 9px 13px; border-radius: 16px; font-size: 14.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.atd-msg.de-atlas { align-self: flex-start; background: #fff; border: 1px solid var(--roxo-100); border-bottom-left-radius: 6px; }
+.atd-msg.de-cliente { align-self: flex-end; background: var(--roxo-600); color: #fff; border-bottom-right-radius: 6px; }
+.atd-msg.atd-cartao { max-width: 100%; width: 100%; background: #fff; border: 1px solid var(--roxo-200); }
+.digitando { display: flex; gap: 4px; padding: 13px 14px; }
+.digitando i { width: 7px; height: 7px; border-radius: 50%; background: var(--roxo-300); animation: atdPisca 1s infinite; }
+.digitando i:nth-child(2) { animation-delay: .15s; } .digitando i:nth-child(3) { animation-delay: .3s; }
+@keyframes atdPisca { 50% { opacity: .3; } }
+.atd-chips { display: flex; gap: 6px; padding: 8px 12px 0; overflow-x: auto; }
+.atd-chips button { flex: none; padding: 7px 12px; border-radius: 999px; font-size: 13px; color: var(--roxo-700); background: var(--roxo-50); border: 1px solid var(--roxo-200); }
+.atd-chips button:hover { background: var(--roxo-100); }
+.atd-form { display: flex; gap: 8px; padding: 10px 12px 12px; }
+.atd-form input { flex: 1; min-width: 0; height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--roxo-200); font-size: 15px; background: #fff; color: var(--tinta); }
+.atd-form input:focus { outline: none; border-color: var(--roxo-500); box-shadow: 0 0 0 3px var(--roxo-100); }
+.atd-form button { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: var(--roxo-600); }
+.atd-form button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.atd-lead { display: flex; flex-direction: column; gap: 8px; }
+.atd-lead p { font-size: 14px; }
+.atd-lead input, .atd-lead select { height: 42px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--roxo-200); font-size: 14.5px; background: #fff; color: var(--tinta); width: 100%; }
+.atd-lead input:focus, .atd-lead select:focus { outline: none; border-color: var(--roxo-500); box-shadow: 0 0 0 3px var(--roxo-100); }
+.atd-lead button { height: 44px; border-radius: 12px; color: #fff; font-weight: 600; background: linear-gradient(135deg, var(--roxo-500), var(--roxo-700)); }
+.atd-lead button:disabled { opacity: .6; }
+.atd-lead small { font-size: 12px; color: var(--tinta-2); }
+.atd-lead small.erro { color: #b42318; }
+@media (max-width: 520px) { .atd-botao span { display: none; } .atd-botao { padding: 0 16px; } .atd-painel { right: 12px; left: 12px; width: auto; bottom: 82px; } }
+@media (prefers-reduced-motion: reduce) { .atd-painel, .digitando i { animation: none; } }

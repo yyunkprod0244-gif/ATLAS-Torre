@@ -25,6 +25,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import os from 'node:os';
+import { pastaDeDados, abrirBanco, criarFila } from './servidor/base.mjs';
+import { criarEstudio } from './servidor/estudio.mjs';
+import { criarAgentes } from './servidor/agentes.mjs';
+import { criarRedes } from './servidor/redes.mjs';
+import { criarVendas } from './servidor/vendas.mjs';
+import { criarSkills } from './servidor/skills.mjs';
 
 const RAIZ = path.dirname(fileURLToPath(import.meta.url));
 try { process.loadEnvFile(path.join(RAIZ, '.env')); } catch { /* sem arquivo .env: tudo bem */ }
@@ -42,6 +49,7 @@ await import('./js/config.js');
 await import('./js/dados.js');
 await import('./js/biblioteca.js');
 await import('./js/skills-externas.js');
+await import('./js/fala.js');
 const T = globalThis.Torre;
 T.gerar();
 const NA = T.ANDARES.length;
@@ -128,7 +136,7 @@ async function prepararLocal() {
   /* voz (Piper): começa primeiro porque carrega em 1 a 2 segundos */
   const py = path.join(LOCAL, 'piper', 'venv', 'Scripts', 'python.exe'), vozes = path.join(LOCAL, 'piper', 'vozes');
   const vozArq = process.env.JARVIS_VOZ ? path.join(vozes, process.env.JARVIS_VOZ + '.onnx')
-    : primeiroArquivo(vozes, (n) => /jeff.*\.onnx$/.test(n)) || primeiroArquivo(vozes, (n) => /\.onnx$/.test(n));
+    : primeiroArquivo(vozes, (n) => /cadu.*\.onnx$/.test(n)) || primeiroArquivo(vozes, (n) => /\.onnx$/.test(n));
   if (fs.existsSync(py) && vozArq && fs.existsSync(vozArq)) {
     local.vozNome = path.basename(vozArq, '.onnx');
     const urlVoz = `http://127.0.0.1:${PORTA_VOZ}/saude`;
@@ -179,6 +187,7 @@ Como responder:
 - Escreva valores como "R$ 48,8 mil" e arredonde quando ajudar a ouvir.
 - Os dados de operação da torre (vendas, marketing, vídeos, financeiro) são simulados nesta fase do projeto. Se perguntarem se são reais, diga isso com clareza. São reais os produtos e preços (bloco "produtos") e o progresso do usuário no bloco "estudo": livros lidos, divisão do salário e passos do lançamento da empresa.
 - O bloco "skillsExternas" lista projetos reais (a maioria no GitHub) que a torre catalogou em andares e salas. O campo "instalada" diz onde está, se já estiver no computador do usuário: llama.cpp, Qwen e Piper estão no disco S: e são o que faz o Jarvis rodar localmente; as demais não estão instaladas. Explique o que fazem e cite os cuidados do campo "atencao". Recomende passar qualquer skill pelo SkillSpector antes de instalar.
+- Além da simulação, a torre tem trabalho REAL no computador do usuário: o Estúdio (vídeos que ele grava: legendas com Whisper, versão vertical com FFmpeg, avaliação), a Publicação (YouTube, TikTok, Instagram, Facebook e LinkedIn, pelas APIs oficiais, depois que ele conecta cada conta), o chat de atendimento do site de vendas (registra clientes) e a Central de Controle, onde ele escolhe se cada departamento fica desligado, pede aprovação ou trabalha sozinho. Para esses assuntos, chame abrir_pagina; ela devolve os números reais. Nunca diga que algo foi publicado sem esse dado.
 - Para começar a empresa com dinheiro de verdade, use estudo.planoDe90Dias (divisão do dinheiro de entrada, fase atual, números do usuário e regras) e abra o livro "plano-3mil". Não prometa resultado: as metas servem para medir o caminho.
 - Sobre dinheiro pessoal, fale da divisão que está em estudo.salario e apresente como um ponto de partida para organizar o mês, não como recomendação de investimento.
 
@@ -237,6 +246,17 @@ function definicoes(acao, estado) {
       description: 'Abre na tela a lista de todos os produtos da empresa, com preços e prazos. Chame quando o usuário pedir os produtos, os planos, o catálogo ou os preços.',
       inputSchema: { type: 'object', properties: {} },
       run: () => { acao({ tipo: 'abrir_produtos' }); return 'Feito: a lista de produtos está aberta na tela. Os dados estão em "produtos", no estado atual.'; },
+    }),
+    ({
+      name: 'abrir_pagina',
+      description: 'Abre uma das ferramentas de trabalho real da torre: "estudio" (enviar, editar e avaliar os vídeos gravados), "publicacao" (conectar YouTube, TikTok, Instagram, Facebook e LinkedIn e agendar posts), "controle" (Central de Controle: o que os agentes podem fazer sozinhos no computador) ou "clientes" (quem deixou contato no chat do site de vendas).',
+      inputSchema: { type: 'object', properties: { pagina: { type: 'string', enum: ['estudio', 'publicacao', 'controle', 'clientes'] } }, required: ['pagina'] },
+      run: ({ pagina }) => {
+        if (!['estudio', 'publicacao', 'controle', 'clientes'].includes(pagina)) return 'Erro: página desconhecida.';
+        acao({ tipo: 'abrir_pagina', pagina });
+        const r = oficinaResumo();
+        return `Feito: ${pagina} aberto. Situação real agora: ${JSON.stringify(r)}`;
+      },
     }),
     ({
       name: 'criar_lembrete',
@@ -510,12 +530,81 @@ function explicarErro(e) {
 }
 
 /* ==========================================================================
+   OFICINA — o que os agentes fazem de verdade no computador
+   Estúdio de vídeo, publicação nas redes, Central de Controle, atendimento do
+   site de vendas e instalação de skills. Tudo grava em ATLAS_DADOS.
+   ======================================================================== */
+const DADOS = pastaDeDados(RAIZ);
+fs.mkdirSync(DADOS, { recursive: true });
+const banco = abrirBanco(path.join(DADOS, 'banco.json'), { videos: [], publicacoes: [], leads: [], pedidos: [], atividade: [], controle: {}, skills: {} });
+/* FFmpeg e Whisper: na pasta do Jarvis local (S:\JarvisLocal) ou indicados no .env */
+function acharExe(...caminhos) { for (const c of caminhos) if (c && fs.existsSync(c)) return c; return ''; }
+/* mesmo com a IA local desligada, o estúdio usa as ferramentas que estão na pasta dela */
+const FERR = LOCAL || 'S:\\JarvisLocal';
+const ferrOficina = {
+  ffmpeg: acharExe(process.env.FFMPEG, path.join(FERR, 'ffmpeg', 'bin', 'ffmpeg.exe')),
+  ffprobe: acharExe(process.env.FFPROBE, path.join(FERR, 'ffmpeg', 'bin', 'ffprobe.exe')),
+  whisper: acharExe(process.env.WHISPER, path.join(FERR, 'whisper', 'bin', 'whisper-cli.exe')),
+  modeloWhisper: acharExe(process.env.WHISPER_MODELO, path.join(FERR, 'whisper', 'modelos', 'ggml-large-v3-turbo-q5_0.bin'), path.join(FERR, 'whisper', 'modelos', 'ggml-small.bin')),
+  threads: Math.max(2, Math.min(8, (os.availableParallelism?.() || 4) - 2)),
+};
+if (!ferrOficina.modeloWhisper) ferrOficina.whisper = '';
+if (!ferrOficina.ffprobe) ferrOficina.ffmpeg = '';
+
+/* Texto com a IA para os agentes (legendas de post, atas, atendimento do site).
+   mensagens: [{ papel: 'user' | 'assistant', texto }] ou só `mensagem`. */
+async function gerarTexto({ sistema, mensagem, mensagens, maxTokens = 600 }) {
+  let msgs = (mensagens?.length ? mensagens : [{ papel: 'user', texto: mensagem }]).map((m) => ({ role: m.papel === 'assistant' ? 'assistant' : 'user', content: String(m.texto || '') }));
+  while (msgs.length && msgs[0].role !== 'user') msgs.shift();
+  msgs = msgs.reduce((a, m) => { const u = a[a.length - 1]; if (u && u.role === m.role) u.content += '\n' + m.content; else a.push({ ...m }); return a; }, []);
+  if (!msgs.length) return '';
+  const motor = motorAtivo();
+  if (motor === 'claude') {
+    const r = await ia.cliente.beta.messages.create({
+      model: MODELO, max_tokens: Math.max(1500, maxTokens), system: sistema, messages: msgs, output_config: { effort: 'low' },
+      ...(COM_FALLBACK.has(MODELO) ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
+    });
+    return r.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  }
+  if (motor === 'local') {
+    const r = await fetch(`http://127.0.0.1:${PORTA_LLAMA}/v1/chat/completions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + local.chave },
+      body: JSON.stringify({ model: local.modelo || 'local', messages: [{ role: 'system', content: sistema }, ...msgs], temperature: 0.6, max_tokens: maxTokens, chat_template_kwargs: { enable_thinking: false } }),
+    });
+    if (!r.ok) throw new Error('a IA local respondeu ' + r.status);
+    return semPensamento((await r.json()).choices?.[0]?.message?.content);
+  }
+  return '';
+}
+
+/* números reais do trabalho dos agentes, para o Jarvis responder sem inventar */
+function oficinaResumo() {
+  const d = banco.d, porStatus = (lista, campo = 'status') => lista.reduce((o, x) => ((o[x[campo]] = (o[x[campo]] || 0) + 1), o), {});
+  return {
+    videos: porStatus(d.videos), publicacoes: porStatus(d.publicacoes || []), clientesDoSite: porStatus(d.leads || []),
+    modosDosDepartamentos: d.controle?.modos, pedidosEsperandoAprovacao: (d.pedidos || []).filter((p) => p.status === 'aguardando').length,
+    redesConectadas: ctx.redes ? Object.keys(ctx.redes.NOMES).filter((r) => ctx.redes.conectada(r)) : [],
+  };
+}
+const ctx = { RAIZ, DADOS, PORTA, T, banco, ferramentas: ferrOficina, gerarTexto, iaDisponivel: () => !!motorAtivo() };
+ctx.fila = criarFila(() => banco.salvar());
+ctx.agentes = criarAgentes(ctx);
+ctx.atividade = ctx.agentes.atividade;
+ctx.estudio = criarEstudio(ctx);
+ctx.redes = criarRedes(ctx);
+ctx.aoChegarVideo = ctx.agentes.aoChegarVideo;
+ctx.aoTerminar = ctx.agentes.aoTerminar;
+ctx.aoAprovar = ctx.agentes.aoAprovar;
+const modulos = [ctx.estudio, ctx.agentes, ctx.redes, criarVendas(ctx), criarSkills(ctx)];
+process.on('exit', () => { try { banco.salvarJa(); } catch { /* sem disco: nada a fazer */ } });
+
+/* ==========================================================================
    SERVIDOR HTTP
    ======================================================================== */
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg', '.mp4': 'video/mp4' };
 /* só estas pastas são públicas; .env, server.mjs e node_modules nunca são servidos.
    /site é o site de vendas (também pode ser hospedado sozinho, em qualquer hospedagem estática). */
-const PUBLICO = /^\/(index\.html|dashboard\.html|jarvis\.html|favicon\.ico|(css|js|vendor|assets|img|site)\/[\w\-./]+)$/;
+const PUBLICO = /^\/(index\.html|dashboard\.html|jarvis\.html|estudio\.html|publicacao\.html|favicon\.ico|(css|js|vendor|assets|img|site)\/[\w\-./]+)$/;
 
 function json(res, status, corpo) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -535,6 +624,12 @@ const servidor = http.createServer(async (req, res) => {
   let caminho;
   try { caminho = decodeURIComponent(url.pathname); } catch { res.writeHead(400).end(); return; }
 
+  /* estúdio, publicação, Central de Controle, atendimento do site e skills */
+  if (caminho.startsWith('/api/')) {
+    try { for (const m of modulos) if (await m.rota(req, res, caminho, url)) return; }
+    catch (e) { console.error('[api]', e); if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' }).end('{"ok":false,"erro":"falha interna"}'); return; }
+  }
+
   if (caminho === '/api/status' && req.method === 'GET') {
     const m = motorAtivo();
     return json(res, 200, {
@@ -551,6 +646,7 @@ const servidor = http.createServer(async (req, res) => {
     if (!local.voz) return json(res, 503, { ok: false, erro: 'voz local indisponível' });
     let texto = '';
     try { texto = String(JSON.parse(await lerCorpo(req, 20_000))?.texto || '').trim().slice(0, 1500); } catch { return json(res, 400, { ok: false, erro: 'JSON inválido' }); }
+    texto = T.Fala.paraFala(texto);   /* números, siglas e palavras em inglês do jeito que se fala (repetir não muda nada) */
     if (!texto) return json(res, 400, { ok: false, erro: 'texto vazio' });
     try {
       const r = await fetch(`http://127.0.0.1:${PORTA_VOZ}/falar`, { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Chave': local.chave }, body: texto });
@@ -631,5 +727,8 @@ servidor.listen(PORTA, HOST, async () => {
     console.log(local.voz ? `  Voz local:    pronta (${local.vozNome})` : '  Voz local:    indisponível (o Jarvis usa a voz do navegador)');
   }
   const m = motorAtivo();
-  console.log(`  Jarvis usa:   ${m === 'claude' ? 'o Claude' : m === 'local' ? 'a IA local (' + local.modelo + ')' : 'só as respostas prontas (modo local, sem IA)'}\n`);
+  console.log(`  Jarvis usa:   ${m === 'claude' ? 'o Claude' : m === 'local' ? 'a IA local (' + local.modelo + ')' : 'só as respostas prontas (modo local, sem IA)'}`);
+  console.log(`  Estúdio:      ${endereco}/estudio.html  (FFmpeg ${ferrOficina.ffmpeg ? 'ok' : 'não encontrado'} · Whisper ${ferrOficina.whisper ? 'ok' : 'não encontrado'})`);
+  console.log(`  Publicação:   ${endereco}/publicacao.html`);
+  console.log(`  Dados:        ${DADOS}  (vídeos, contatos do site, skills e o que os agentes fazem)\n`);
 });

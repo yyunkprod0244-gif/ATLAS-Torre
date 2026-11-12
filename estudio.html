@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#05070d">
+  <title>Estúdio — Atlas Digital Engineering</title>
+  <meta name="description" content="Envie os vídeos que você grava, edite para as redes, avalie e aprove o que os agentes vão publicar.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%2305070d%27/%3E%3Cpath d=%27M6 10h14v12H6zM20 14l6-3v10l-6-3%27 fill=%27none%27 stroke=%27%23c98500%27 stroke-width=%272%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/torre.css">
+  <link rel="stylesheet" href="css/paginas.css">
+  <link rel="stylesheet" href="css/midia.css">
+</head>
+<body class="pagina midia">
+  <header class="pg-topo">
+    <a class="marca" href="index.html?semintro" aria-label="Voltar para a torre">
+      <svg class="marca-logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3l7 5v3H9V8z"/><rect x="9" y="13" width="14" height="3.4" rx="1"/><rect x="9" y="18.3" width="14" height="3.4" rx="1"/><rect x="9" y="23.6" width="14" height="3.4" rx="1"/></svg>
+      <span class="marca-txt"><b class="marca-nome">ATLAS</b><span class="marca-sub">Estúdio de vídeo</span></span>
+    </a>
+    <p class="pg-data" id="pgEstado"></p>
+    <nav class="pg-nav" aria-label="Outras páginas">
+      <a class="bt" href="index.html?semintro"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21V7l4-4 4 4v14M5 21h14M10 10h4M10 13.5h4M10 17h4"/></svg><span>Torre</span></a>
+      <a class="bt" href="publicacao.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v6h16v-6"/></svg><span>Publicação</span></a>
+      <a class="bt" href="dashboard.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V13M10 20V8M16 20V11M22 20H2M20 20V4"/></svg><span>Dashboard</span></a>
+    </nav>
+  </header>
+
+  <main class="estudio" id="conteudo">
+    <aside class="est-lado" aria-label="Seus vídeos">
+      <section class="envio vidro" aria-labelledby="tEnvio">
+        <h1 id="tEnvio">Enviar vídeos</h1>
+        <label class="soltar" id="soltar">
+          <input type="file" id="arquivos" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv,.m4v,.avi" multiple>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v6h16v-6"/></svg>
+          <b>Arraste os vídeos aqui</b><span>ou clique para escolher · MP4, MOV, WEBM · até 4 GB</span>
+        </label>
+        <label class="marcar"><input type="checkbox" id="ehReuniao"> É a gravação de uma reunião (vira transcrição e ata)</label>
+        <ul class="envios" id="envios" aria-live="polite"></ul>
+      </section>
+      <div class="filtros" role="tablist" aria-label="Filtrar vídeos" id="filtros"></div>
+      <ul class="lista-videos" id="lista" aria-live="polite"></ul>
+    </aside>
+
+    <section class="est-detalhe" id="detalhe" aria-live="polite">
+      <div class="vazio-grande"><p>Escolha um vídeo da lista</p><small>Ou envie um vídeo: os agentes de Edição de Vídeo geram as legendas e a versão para as redes (se a Central de Controle deixar), e você avalia aqui.</small></div>
+    </section>
+  </main>
+
+  <div class="aviso" id="aviso" role="status" hidden></div>
+
+  <script src="site/catalogo.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/dados.js"></script>
+  <script src="js/estudio.js"></script>
+</body>
+</html>
