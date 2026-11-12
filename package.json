@@ -1,8 +1,8 @@
 {
-  "name": "torre-apice",
+  "name": "torre-atlas",
   "version": "1.0.0",
   "private": true,
-  "description": "Torre virtual da empresa: 8 andares de agentes e skills em 3D, com o assistente Jarvis.",
+  "description": "Atlas Digital Engineering: torre de comando em 3D (andares, salas, agentes, biblioteca e o assistente Jarvis) e o site de vendas.",
   "type": "commonjs",
   "scripts": {
     "start": "node server.mjs"

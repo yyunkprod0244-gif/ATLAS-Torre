@@ -13,18 +13,18 @@
   'use strict';
   var T = root.Torre, F = T.fmt, S = null, cb = {};
   var $ = function (id) { return document.getElementById(id); };
-  var estado = 'parado', vozLigada = true, ia = { ativa: false, modelo: '' }, historico = [], ocupado = false;
+  var estado = 'parado', vozLigada = true, ia = { ativa: false, modelo: '' }, historico = [];
 
   /* ==========================================================================
      ENTENDER O QUE FOI DITO (modo local)
      ======================================================================== */
   function limpar(t) { return T.normalizar(t).replace(/[?!.,;:"«»]/g, ' ').replace(/\s+/g, ' ').trim(); }
-  var ORDINAIS = ['primeiro', 'segundo', 'terceiro', 'quarto', 'quinto', 'sexto', 'setimo', 'oitavo'];
+  var ORDINAIS = ['primeiro', 'segundo', 'terceiro', 'quarto', 'quinto', 'sexto', 'setimo', 'oitavo', 'nono', 'decimo'];
 
   function qualAndar(t) {
-    var m = t.match(/(\d)\s*(?:o|º|°)?\s*andar/) || t.match(/(?:andar|piso)\s*(?:numero\s*)?(\d)/);
-    if (m && +m[1] >= 1 && +m[1] <= 8) return +m[1];
-    for (var i = 0; i < 8; i++) if (t.indexOf(ORDINAIS[i] + ' andar') >= 0) return i + 1;
+    var m = t.match(/(\d+)\s*(?:o|º|°)?\s*andar/) || t.match(/(?:andar|piso)\s*(?:numero\s*)?(\d+)/), total = T.ANDARES.length;
+    if (m && +m[1] >= 1 && +m[1] <= total) return +m[1];
+    for (var i = 0; i < total && i < ORDINAIS.length; i++) if (t.indexOf(ORDINAIS[i] + ' andar') >= 0) return i + 1;
     var melhor = 0, tam = 0;
     T.ANDARES.forEach(function (a) {
       a.chaves.forEach(function (c) { if (c.length > tam && new RegExp('(^|\\s)' + c + '(\\s|$)').test(t)) { melhor = a.n; tam = c.length; } });
@@ -65,6 +65,31 @@
     return out;
   }
 
+  /* "entre na sala de prospecção", "mostre o squad de SEO": devolve { andar, k } ou null.
+     Um nome de sala exato ganha; se o que sobrar for o nome de um andar ("sala de reuniões"),
+     é o andar que a pessoa quer, e quem responde é a regra dos andares. */
+  var SOBRAS_SALA = /\b(sala|salas|squad|squads|time|equipe|grupo|entre|entrar|entra|abra|abrir|abre|mostre|mostrar|mostra|ir|va|vai|vamos|para|pra|ver|quero|me|leve|leva|na|no|nas|nos|da|do|das|dos|de|a|o|as|os|dentro|interior|zoom|andar|piso|\d+)\b/g;
+  function qualSala(t) {
+    if (!/\b(sala|squad|time|equipe|grupo)\b/.test(t)) return null;
+    var termo = t.replace(SOBRAS_SALA, ' ').replace(/\s+/g, ' ').trim(), exata = null, n = qualAndar(t), semAndar = termo;
+    if (!termo) return null;
+    if (n) T.andar(n).chaves.forEach(function (c) { semAndar = (' ' + semAndar + ' ').replace(' ' + c + ' ', ' ').trim(); });
+    [semAndar, termo].forEach(function (alvo) {
+      if (exata || !alvo) return;
+      T.ANDARES.forEach(function (a) { a.squads.forEach(function (s, k) { if (!exata && T.normalizar(s.nome) === alvo) exata = { andar: a, k: k }; }); });
+    });
+    if (exata) return exata;
+    if (T.ANDARES.some(function (a) { return a.chaves.indexOf(termo) >= 0; })) return null;
+    return (n && semAndar && T.buscarSala(semAndar, n)) || T.buscarSala(termo, 0);
+  }
+  /* "meu salário é de 2.500", "salário de 3 mil": devolve o valor citado, ou null */
+  function valorCitado(original) {
+    var m = String(original).match(/(\d{1,3}(?:\.\d{3})+|\d+)(?:,\d+)?\s*(mil\b)?/i);
+    if (!m) return null;
+    var v = +m[1].replace(/\./g, '') * (m[2] ? 1000 : 1);
+    return v >= 100 ? v : null;
+  }
+
   /* ==========================================================================
      RESPOSTAS DO MODO LOCAL
      Cada resposta: { texto, acao? }  (acao é executada antes de falar)
@@ -79,10 +104,13 @@
   function interpretar(original) {
     var t = limpar(original), h = S.hoje, n = qualAndar(t), fin, re, m, lista;
 
-    if (/^(pare|para|parar|silencio|chega|cala|quieto|ok pare)\b/.test(t)) return { texto: '', parar: true, local: true };
+    /* só a ordem sozinha: "para que serve…" é pergunta, não pedido para parar */
+    if (/^(ok |jarvis )?(pare|para|parar|silencio|chega|cala a boca|cala|quieto|fica quieto)( de falar| jarvis| ai| por favor)?$/.test(t)) return { texto: '', parar: true, local: true };
     if (/(desativ|deslig|sem) (a )?voz|fique mudo|modo mudo/.test(t)) return { texto: 'Voz desligada. Continuo respondendo por texto.', voz: false, local: true };
     if (/(ativ|lig)\w* (a )?voz|pode falar|fale comigo/.test(t)) return { texto: 'Voz ligada.', voz: true, local: true };
 
+    /* cancelar vem antes de marcar: "desmarque" também contém "marque" */
+    if (/(cancel|desmar[cq]|remov|apag|exclu)\w*\s+(a\s+|essa\s+|aquela\s+|minha\s+|uma\s+)?(ultima\s+)?(reuni|call|encontro)/.test(t)) return { texto: null, comando: true, cancelar: t };
     if (/(marc|marq|agend)\w*\s+(uma\s+|um\s+|a\s+)?(reuni|call|encontro|conversa)/.test(t)) {
       var q = quando(t), ands = andaresCitados(t).filter(function (x) { return x !== 7; });
       return { texto: null, comando: true, reuniao: { titulo: tituloDe(original, t), inicio: q.inicio, dur: q.dur, andares: ands, origem: 'jarvis' } };
@@ -90,6 +118,29 @@
     if ((m = t.match(/^(anota|anote|anotar|registra|registre|registrar|nova informacao|avisa|avise)\b\s*(ai|isso|que|a torre)?\s*/)) && t.length > m[0].length + 3)
       return { texto: null, comando: true, info: original.slice(m[0].length).replace(/^[:\s]+/, '') };
     if ((m = t.match(/(?:mude|troque|altere|defina)\s+o nome da empresa para\s+(.+)/))) return { texto: null, comando: true, nome: original.slice(original.length - m[1].length) };
+
+    /* ---------- skills externas (projetos do GitHub catalogados na torre) ---------- */
+    if (T.SKILLS_EXTERNAS) {
+      var ext = T.buscarSkillExterna(t);
+      if (ext || /(skills? externas?|ferramentas? externas?|do github|no github|skills? (que )?(voce )?(adicionou|instalou|catalogou))/.test(t)) return { texto: null, comando: true, externa: ext ? ext.id : '' };
+    }
+
+    /* ---------- produtos, guias, livros e salas (vêm antes dos andares: "livro" e "sala" também são nomes de andar) ---------- */
+    if (/\b(produtos?|catalogo|planos|precos?|quanto custa)\b/.test(t) && !/(reuni|estudo)/.test(t)) return { texto: null, comando: true, produtos: true };
+    if (/\bsalario\b/.test(t)) return { texto: null, comando: true, salario: valorCitado(original) };
+    /* plano de 90 dias com dinheiro de verdade */
+    if (/(plano de (90|noventa) dias|90 dias|\bmil (reais )?(de entrada|para (comecar|investir|a empresa|tudo))|\d\.?000 (reais )?(de entrada|para (comecar|investir|a empresa|tudo))|dinheiro de entrada|de entrada (para|pra) (a empresa|tudo|comecar)|capital (inicial|de giro)|investimento inicial|(para|pra) (dar|isso dar) certo|o que (eu )?(faco|fazer|devo fazer) hoje|(comecar|investir|abrir a empresa) com .*\b(mil|reais)\b)/.test(t)) {
+      var cap = /(entrada|investir|capital|investimento|tenho|comecar com)/.test(t) ? valorCitado(original) : null;
+      return { texto: null, comando: true, plano: cap };
+    }
+    if (/(lanc\w*|coloc\w*|abr\w*|tirar do papel).{0,30}\b(empresa|negocio)\b|\b(empresa|negocio)\b.{0,30}(no ar|lanc\w*)|o que falta|checklist/.test(t)) return { texto: null, comando: true, lancamento: true };
+    if (/\b(livros?|guias?|ler|leia|leitura|estudar|estude|aulas?)\b/.test(t)) {
+      var achado = T.buscarLivro && T.buscarLivro(t.replace(/\b(abra|abrir|abre|mostre|mostrar|mostra|quero|ler|leia|o|a|os|as|um|uma|livro|livros|guia|guias|sobre|de|do|da|me|estudar|estude|aula|aulas|para|leitura)\b/g, ' '));
+      if (achado) return { texto: null, comando: true, livro: achado.id };
+      if (/\b(quais|quantos|lista|listar|que livros|tem)\b/.test(t)) return { texto: null, comando: true, acervo: true };
+    }
+    var salaPedida = qualSala(t);
+    if (salaPedida) return { texto: null, comando: true, sala: { n: salaPedida.andar.n, k: salaPedida.k } };
 
     var querIr = /\b(ir|vai|va|vamos|leve|leva|levar|mostre|mostra|mostrar|abra|abre|abrir|entre|entra|entrar|suba|sobe|desca|desce|visite|visitar|quero ver|me mostra|ver o|ver a)\b/.test(t);
     if (/(visao geral|torre inteira|voltar|volte|sair do andar|saia do andar|afastar|ver a torre|ver tudo)/.test(t)) return { texto: 'Voltando para a visão geral da torre.', comando: true, ir: 0 };
@@ -124,7 +175,7 @@
     }
     if (/quant\w+ (agentes|skills|habilidades|andares)|numero de (agentes|skills)/.test(t)) {
       if (n) return { texto: T.andar(n).titulo + ' tem ' + F.int(T.andar(n).agentes.length) + ' agentes e ' + F.int(T.andar(n).skills.length) + ' skills, em ' + T.andar(n).squads.length + ' squads.' };
-      return { texto: 'A torre tem 8 andares, ' + F.int(T.TOTAIS.agentes) + ' agentes e ' + F.int(T.TOTAIS.skills) + ' skills. Agora, ' + F.int(S.agentesAtivos()) + ' agentes estão ativos.' };
+      return { texto: 'A torre tem ' + T.ANDARES.length + ' andares, ' + T.TOTAIS.salas + ' salas, ' + F.int(T.TOTAIS.agentes) + ' agentes e ' + F.int(T.TOTAIS.skills) + ' skills. Agora, ' + F.int(S.agentesAtivos()) + ' agentes estão ativos.' };
     }
     if (/(venda|vendeu|vendemos|vendid|lead|proposta|conversao|ticket|fechamos|fechou)/.test(t)) {
       var ult = S.estado.vendas[0];
@@ -153,15 +204,15 @@
       var it = S.estado.inbox[0];
       return { texto: 'Chegaram ' + F.int(h.info) + ' informações hoje e ' + h.pendentes + ' estão na fila de triagem. ' + (it ? 'A última foi: ' + it.texto + ', entregue a ' + T.andar(it.destino).nome + '.' : '') };
     }
-    if (/(mega brain|cerebro|roteada|decis)/.test(t)) return { texto: 'O Mega Brain roteou ' + F.compacto(h.msgs) + ' mensagens entre os andares hoje e tomou ' + F.compacto(h.decisoes) + ' decisões sem intervenção humana. Os 8 andares estão sincronizados.' };
+    if (/(mega brain|cerebro|roteada|decis)/.test(t)) return { texto: 'O Mega Brain roteou ' + F.compacto(h.msgs) + ' mensagens entre os andares hoje e tomou ' + F.compacto(h.decisoes) + ' decisões sem intervenção humana. Os ' + T.ANDARES.length + ' andares estão sincronizados.' };
     if (n) return { texto: sobreAndar(n) };
     if (/(como (esta|vai|anda) a empresa|status|tudo (certo|bem|ok)|situacao|panorama|sobre a empresa|fale da empresa|me atualiza)/.test(t)) {
       fin = S.financeiro(); var al = S.resumo().alertas;
       return { texto: S.nomeEmpresa() + ' está operando com ' + F.int(S.agentesAtivos()) + ' agentes ativos. Hoje: ' + F.int(h.vendas) + ' sites vendidos, ' + F.brlc(h.receita) + ' de receita e ' + F.int(h.posts) + ' posts publicados. No mês, o resultado está em ' + F.brlc(fin.resultado) + '. ' + (al.length ? 'Um ponto de atenção: ' + al[0] : 'Nenhum alerta no momento.') };
     }
     if (/(que horas|horario agora|que dia e hoje|data de hoje)/.test(t)) return { texto: 'Agora são ' + F.hora(new Date()) + ' de ' + F.dataLonga(new Date()) + '.' };
-    if (/(quem e voce|seu nome|o que voce e|voce e uma ia)/.test(t)) return { texto: 'Sou o Jarvis, o assistente da ' + S.nomeEmpresa() + '. Acompanho os 8 andares da torre e respondo sobre vendas, marketing, vídeos, publicações, financeiro e reuniões. Os números que mostro hoje são simulados.' };
-    if (/(ajuda|o que voce (faz|sabe|pode)|comandos|como (te )?uso)/.test(t)) return { texto: 'Posso: levar você a um andar (“abra o financeiro”), contar como estão vendas, marketing, vídeos, redes e gastos, ler o resumo do dia, marcar reuniões (“marque uma reunião amanhã às 15h sobre a proposta”), registrar informações (“anota: cliente quer loja virtual”) e procurar agentes ou skills.' };
+    if (/(quem e voce|seu nome|o que voce e|voce e uma ia)/.test(t)) return { texto: 'Sou o Jarvis, o assistente da ' + S.nomeEmpresa() + '. Acompanho os ' + T.ANDARES.length + ' andares da torre e respondo sobre vendas, marketing, vídeos, publicações, financeiro, reuniões e estudo. Os números da operação que mostro hoje são simulados; o seu progresso de estudo é real.' };
+    if (/(ajuda|o que voce (faz|sabe|pode)|comandos|como (te )?uso)/.test(t)) return { texto: 'Posso: levar você a um andar (“abra o financeiro”), contar como estão vendas, marketing, vídeos, redes e gastos, ler o resumo do dia, marcar e cancelar reuniões (“marque uma reunião amanhã às 15h sobre a proposta”), registrar informações (“anota: cliente quer loja virtual”) e procurar agentes ou skills. Também entro em uma sala (“entre na sala de prospecção”), mostro os produtos, abro livros da biblioteca (“abra o livro de objeções”), divido o seu salário (“meu salário é de 2.000”), digo o que falta para lançar a empresa e explico as skills externas do GitHub (“o que é o Ponytail?”).' };
     if (/^(oi|ola|e ai|eai|hey|bom dia|boa tarde|boa noite|fala)\b/.test(t)) return { texto: saudacaoHora() + '. ' + S.nomeEmpresa() + ' vendeu ' + F.int(h.vendas) + ' sites hoje, somando ' + F.brlc(h.receita) + '. Sobre o que quer saber?' };
     if (/(obrigad|valeu|show|perfeito|otimo)/.test(t)) return { texto: 'Às ordens.' };
     return { texto: null, desconhecido: true };
@@ -176,18 +227,100 @@
     if (cb.irPara) cb.irPara(7);
     return 'Reunião marcada: “' + m.reuniao.titulo + '”, ' + F.dataLonga(m.reuniao.inicio) + ' às ' + F.hora(m.reuniao.inicio) + ', com ' + m.reuniao.dur + ' minutos. Já está na agenda do 7º andar.';
   }
+  /* Cancela uma reunião marcada por você: a única que existe, a que tem o assunto citado, ou a última marcada. */
+  var SEM_PESO = { reuniao: 1, marcada: 1, pelo: 1, jarvis: 1, para: 1, sobre: 1, cliente: 1 };
+  function cancelar(t) {
+    var agora = new Date(), minhas = S.estado.reunioesUsuario.filter(function (m) { return m.fim > agora; });
+    if (!minhas.length) return 'Você não tem nenhuma reunião marcada para cancelar. As reuniões automáticas da torre seguem na agenda.';
+    var alvo = null, melhor = 0, empate = false, frase = ' ' + t + ' ';
+    minhas.forEach(function (m) {
+      var p = limpar(m.titulo).split(' ').filter(function (w) { return w.length > 3 && !SEM_PESO[w] && frase.indexOf(' ' + w + ' ') >= 0; }).length;
+      if (p > melhor) { melhor = p; alvo = m; empate = false; } else if (p && p === melhor) empate = true;
+    });
+    if (!melhor || empate) alvo = minhas.length === 1 || /ultima/.test(t) ? minhas[minhas.length - 1] : null;
+    if (!alvo) return 'Você tem ' + minhas.length + ' reuniões marcadas: ' + minhas.map(function (m) { return m.titulo + ', ' + F.dataMedia(m.inicio) + ' às ' + F.hora(m.inicio); }).join('; ') + '. Diga o assunto da que quer cancelar.';
+    S.removerReuniao(alvo.id);
+    if (cb.irPara) cb.irPara(7);
+    return 'Reunião cancelada: “' + alvo.titulo + '”, que estava marcada para ' + F.dataLonga(alvo.inicio) + ' às ' + F.hora(alvo.inicio) + '.';
+  }
   function registrar(texto) {
     var r = S.registrarInfo(texto, 'Jarvis');
     return r.erro ? r.erro : 'Anotado. O Mega Brain entregou a informação a ' + r.andar.nome + '.';
+  }
+
+  /* ---------- produtos, salas e estudo ---------- */
+  function mostrarProdutos() {
+    var prods = (T.CATALOGO && T.CATALOGO.produtos) || [];
+    if (cb.abrirProdutos) cb.abrirProdutos();
+    if (!prods.length) return 'Não encontrei o catálogo de produtos.';
+    return 'São ' + prods.length + ' produtos: ' + prods.map(function (p) { return p.nome + ', ' + F.brl(p.preco) + (p.mensal ? ' por mês' : ''); }).join('; ') + '. Abri a lista completa na tela.';
+  }
+  function entrarNaSala(n, k) {
+    var a = T.andar(n), q = a && a.squads[k];
+    if (!q) return 'Não encontrei essa sala.';
+    if (cb.irParaSala) cb.irParaSala(n, k);
+    return 'Entrando na sala ' + q.nome + ', no ' + n + 'º andar. São ' + F.int(q.qtd) + ' agentes, cada um com mesa, computador e cadeira.';
+  }
+  function abrirLivro(id) {
+    var b = T.livro && T.livro(id);
+    if (!b) return 'Não encontrei esse livro na biblioteca.';
+    if (cb.abrirLivro) cb.abrirLivro(id);
+    return 'Abri o livro “' + b.titulo + '”. ' + b.resumo;
+  }
+  function guiaSalario(valor) {
+    if (valor) S.definirSalario(valor, S.estado.estudo.salario.essenciais);
+    var p = S.planoSalario();
+    if (cb.abrirLivro) cb.abrirLivro('salario');
+    return 'Para um salário de ' + F.brl(p.valor) + ': ' + p.linhas.map(function (l) { return l.nome.toLowerCase() + ', ' + F.brl(l.valor); }).join('; ') + '. A reserva sai primeiro, no dia do pagamento. Abri o passo a passo completo.';
+  }
+  function guiaPlano(capital) {
+    if (capital) S.definirCapital(capital);
+    var pl = S.planoLancamento(), P = T.PLANO, fz = pl.fase >= 0 ? P.fases[pl.fase] : P.fases[0], d = pl.divisao;
+    if (cb.abrirLivro) cb.abrirLivro('plano-3mil');
+    return 'Com ' + F.brl(pl.capital) + ': ' + d.linhas.filter(function (l) { return l.valor; }).map(function (l) { return l.nome.toLowerCase() + ', ' + F.brl(l.valor); }).join('; ') + '. ' +
+      (pl.dia && !pl.terminou ? 'Você está no dia ' + pl.dia + ' de 90, na fase ' + fz.nome.toLowerCase() + '. Hoje: ' + fz.tarefas[0][0].toLowerCase() + '.' : 'Comece pela semana 1: ' + fz.tarefas.slice(0, 3).map(function (x) { return x[0].toLowerCase(); }).join(', ') + '.') +
+      ' O que mais faz dar certo: vender antes de gastar e fazer de 10 a 15 contatos por dia útil. Abri o plano completo.';
+  }
+  function guiaLancamento() {
+    var lc = S.lancamento();
+    if (cb.abrirLivro) cb.abrirLivro('lancamento');
+    if (!lc.proximos.length) return 'Todos os ' + lc.total + ' passos do lançamento estão concluídos. A empresa está no ar.';
+    return 'Lançamento da empresa: ' + lc.feitos + ' de ' + lc.total + ' passos concluídos. Os próximos são: ' + lc.proximos.slice(0, 3).map(function (x) { return x.texto.charAt(0).toLowerCase() + x.texto.slice(1); }).join('; ') + '. Abri o checklist completo.';
+  }
+  function falarDeSkillExterna(id) {
+    var lista = T.SKILLS_EXTERNAS || [], s = id ? T.skillExterna(id) : null;
+    if (s) {
+      var l = T.lugarDaSkill(s);
+      if (cb.mostrarSkillExterna) cb.mostrarSkillExterna(s.id);
+      return s.nome + ': ' + s.resumo + ' Fica na sala ' + s.sala + (l ? ', no ' + l.andar.n + 'º andar' : '') + ', e ainda não está instalada. Atenção: ' + s.atencao.split('. ')[0].replace(/\.$/, '') + '.';
+    }
+    if (cb.abrirSkillsExternas) cb.abrirSkillsExternas();
+    /* agrupa por andar para a fala não virar uma lista de 16 nomes soltos */
+    var porAndar = T.ANDARES.map(function (a) {
+      var nomes = lista.filter(function (x) { var l = T.lugarDaSkill(x); return l && l.andar.n === a.n; }).map(function (x) { return x.nome; });
+      return nomes.length ? a.nome + ': ' + nomes.join(', ') : '';
+    }).filter(Boolean);
+    return 'São ' + lista.length + ' skills externas, todas projetos do GitHub e nenhuma instalada. ' + porAndar.join('. ') + '. Antes de instalar qualquer uma, passe pelo SkillSpector. Abri o catálogo; diga um nome e eu mostro os detalhes.';
+  }
+  function falarDoAcervo() {
+    var n = S.andarEstudo(), a = n && T.andar(n), total = (T.BIBLIOTECA || []).length;
+    if (!a) return 'A biblioteca não está disponível.';
+    if (cb.irPara) cb.irPara(n);
+    return 'A biblioteca tem ' + total + ' livros em ' + a.squads.length + ' salas: ' + a.squads.map(function (s) { return s.nome; }).join(', ') + '. Você já leu ' + S.livrosLidos() + '. Diga o assunto e eu abro o livro.';
   }
   /* ações pedidas pela IA (vêm do servidor) */
   function executarAcao(a) {
     try {
       if (a.tipo === 'ir_para_andar' && cb.irPara) cb.irPara(a.andar | 0);
       else if (a.tipo === 'marcar_reuniao') { S.marcarReuniao({ titulo: a.titulo, inicio: new Date(a.inicio), dur: a.duracao_min, andares: a.andares, origem: 'jarvis' }); if (cb.irPara) cb.irPara(7); }
+      else if (a.tipo === 'cancelar_reuniao') { S.removerReuniao(String(a.id)); if (cb.irPara) cb.irPara(7); }
       else if (a.tipo === 'registrar_informacao') S.registrarInfo(a.texto, 'Jarvis');
       else if (a.tipo === 'abrir_resumo' && cb.abrirResumo) cb.abrirResumo();
       else if (a.tipo === 'mostrar_agente' && cb.abrirAgente) cb.abrirAgente(a.andar | 0, a.indice | 0);
+      else if (a.tipo === 'ir_para_sala' && cb.irParaSala) cb.irParaSala(a.andar | 0, a.sala | 0);
+      else if (a.tipo === 'abrir_livro' && cb.abrirLivro) cb.abrirLivro(String(a.id));
+      else if (a.tipo === 'abrir_produtos' && cb.abrirProdutos) cb.abrirProdutos();
+      else if (a.tipo === 'mostrar_skill_externa' && cb.mostrarSkillExterna) cb.mostrarSkillExterna(String(a.id));
     } catch (e) { console.error('[jarvis] ação falhou', a, e); }
   }
 
@@ -195,6 +328,15 @@
     if (r.voz != null) definirVoz(r.voz);
     if (r.ir != null && cb.irPara) cb.irPara(r.ir);
     if (r.reuniao) return marcar(r.reuniao);
+    if (r.cancelar) return cancelar(r.cancelar);
+    if (r.externa !== undefined) return falarDeSkillExterna(r.externa);
+    if (r.produtos) return mostrarProdutos();
+    if (r.salario !== undefined) return guiaSalario(r.salario);
+    if (r.plano !== undefined) return guiaPlano(r.plano);
+    if (r.lancamento) return guiaLancamento();
+    if (r.livro) return abrirLivro(r.livro);
+    if (r.acervo) return falarDoAcervo();
+    if (r.sala) return entrarNaSala(r.sala.n, r.sala.k);
     if (r.info) return registrar(r.info);
     if (r.nome) return 'Pronto. A empresa agora se chama ' + S.definirNomeEmpresa(r.nome) + '.';
     if (r.agente && cb.abrirAgente) cb.abrirAgente(r.agente.n, r.agente.i);
@@ -203,36 +345,83 @@
     return r.texto;
   }
 
-  async function viaIA(texto) {
-    var resp = await root.fetch('/api/jarvis', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+  /* A resposta da IA chega aos poucos: o texto vai aparecendo no balão, cada frase
+     completa já é falada e as ações na torre acontecem na hora.
+     Devolve o texto final, ou null se a pergunta foi interrompida. */
+  var vez = 0, corte = null, balaoAberto = null;
+
+  async function viaIA(texto, balao, minha) {
+    corte = root.AbortController ? new root.AbortController() : null;
+    var resp = await root.fetch('/api/jarvis/fluxo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: corte ? corte.signal : undefined,
       body: JSON.stringify({ mensagem: texto, historico: historico.slice(-12), estado: S.snapshot() })
     });
-    var j = await resp.json();
-    if (!resp.ok || !j.ok) throw new Error(j.erro || 'Falha ao falar com a IA (' + resp.status + ')');
-    (j.acoes || []).forEach(executarAcao);
-    return j.texto;
+    if (!resp.ok || !resp.body) {
+      var j = await resp.json().catch(function () { return {}; });
+      throw new Error(j.erro || 'Falha ao falar com a IA (' + resp.status + ')');
+    }
+    var leitor = resp.body.getReader(), dec = new root.TextDecoder(), resto = '', dito = '', fim = null, i, ev;
+    abrirFala();
+    try {
+      for (;;) {
+        var p = await leitor.read();
+        if (minha !== vez) return null;
+        if (p.done) break;
+        resto += dec.decode(p.value, { stream: true });
+        while ((i = resto.indexOf('\n')) >= 0) {
+          ev = resto.slice(0, i).trim(); resto = resto.slice(i + 1);
+          if (!ev) continue;
+          ev = JSON.parse(ev);
+          if (ev.t === 'texto') { dito += ev.d; balao.classList.remove('digitando'); balao.textContent = dito; rolar(); alimentarFala(ev.d); }
+          else if (ev.t === 'acao') executarAcao(ev.acao);
+          else if (ev.t === 'fim') fim = ev;
+          else if (ev.t === 'erro') throw new Error(ev.erro);
+        }
+      }
+      if (!fim && !dito.trim()) throw new Error('a resposta veio vazia');
+    } catch (e) {
+      if (minha !== vez) return null;
+      if (!dito.trim()) throw e; /* nada chegou: quem chamou responde no modo local */
+      console.warn('[jarvis] a resposta da IA foi interrompida:', e.message);
+    }
+    if (fim && fim.substituir) { balao.classList.remove('digitando'); balao.textContent = fim.texto; rolar(); falar(fim.texto); return fim.texto; }
+    dito = (fim ? fim.texto : dito).trim();
+    balao.textContent = dito; rolar();
+    fecharFala();
+    return dito;
+  }
+
+  /* Larga a pergunta em andamento: corta o pedido à IA, cala a voz e arruma o balão pela metade. */
+  function interromper() {
+    vez++;
+    if (corte) { try { corte.abort(); } catch (e) { /* já terminou */ } corte = null; }
+    if (balaoAberto) { if (balaoAberto.textContent.trim()) balaoAberto.classList.remove('digitando'); else if (balaoAberto.parentNode) balaoAberto.parentNode.removeChild(balaoAberto); balaoAberto = null; }
+    pararFala();
   }
 
   async function perguntar(texto, o) {
     texto = String(texto || '').trim();
-    if (!texto || ocupado) return;
+    if (!texto) return;
     o = o || {};
-    pararFala();
+    interromper(); /* uma pergunta nova substitui a anterior, mesmo no meio da resposta */
+    var minha = vez;
     if (!o.oculto) bolha('voce', texto);
-    var r = interpretar(texto), resposta;
+    var r = interpretar(texto), resposta = null, balao = null, aoVivo = false;
     if (r.parar) return definirEstado('parado');
-    ocupado = true; definirEstado('pensando');
+    definirEstado('pensando');
     /* comandos e ajustes simples são resolvidos na hora; o resto vai para a IA quando ela existe */
     if (ia.ativa && !r.local && !(r.comando && texto.split(/\s+/).length <= 7)) {
-      try { resposta = await viaIA(texto); }
-      catch (e) { console.warn('[jarvis] IA indisponível, respondendo no modo local:', e.message); resposta = null; }
+      balao = balaoAberto = bolha('jarvis', ''); balao.classList.add('digitando');
+      try { resposta = await viaIA(texto, balao, minha); aoVivo = !!resposta; }
+      catch (e) { if (minha === vez) console.warn('[jarvis] IA indisponível, respondendo no modo local:', e.message); }
+      if (minha !== vez) return;
+      corte = null; balaoAberto = null;
     }
     if (!resposta) resposta = responderLocal(r, texto);
-    ocupado = false;
     historico.push({ papel: 'user', texto: texto }, { papel: 'assistant', texto: resposta });
     if (historico.length > 24) historico = historico.slice(-24);
-    bolha('jarvis', resposta);
+    if (aoVivo) return resposta; /* já está na tela e sendo falada */
+    if (balao) { balao.classList.remove('digitando'); balao.textContent = resposta; rolar(); } else bolha('jarvis', resposta);
     falar(resposta);
     return resposta;
   }
@@ -253,19 +442,51 @@
     return t.replace(/R\$\s?([\d.]+(?:,\d+)?)\s?(mil|mi|bi)?/g, function (_, n, e) { return n + (e === 'mi' ? ' milhões de' : e === 'bi' ? ' bilhões de' : e ? ' mil' : '') + ' reais'; })
       .replace(/(\d)\s?mi\b/g, '$1 milhões').replace(/[«»“”"]/g, '').replace(/×/g, ' com ').replace(/—|–/g, ', ').replace(/\s+/g, ' ');
   }
-  function falar(texto) {
-    if (!vozLigada || !sint || !texto) { definirEstado('parado'); return; }
-    sint.cancel();
-    var partes = paraFala(texto).match(/[^.!?;]+[.!?;]*/g) || [texto], restam = partes.length;
-    definirEstado('falando');
-    partes.forEach(function (p) {
-      var u = new root.SpeechSynthesisUtterance(p.trim());
-      u.lang = 'pt-BR'; if (vozEscolhida) u.voice = vozEscolhida; u.rate = 1.06; u.pitch = 0.92;
-      u.onend = u.onerror = function () { if (--restam <= 0 && estado === 'falando') definirEstado('parado'); };
-      sint.speak(u);
-    });
+  /* Separa o texto em frases. Só corta depois de pontuação seguida de espaço, para não
+     partir números como "R$ 4.800". Sem `tudo`, o trecho final ainda incompleto fica em `resto`. */
+  function cortarFrases(t, tudo) {
+    var frases = [], re = /[.!?;]+["”»)]*\s+/g, ini = 0;
+    while (re.exec(t)) { frases.push(t.slice(ini, re.lastIndex)); ini = re.lastIndex; }
+    var resto = t.slice(ini);
+    if (tudo && resto.trim()) { frases.push(resto); resto = ''; }
+    return { frases: frases, resto: resto };
   }
-  function pararFala() { if (sint) sint.cancel(); if (estado === 'falando') definirEstado('parado'); }
+
+  /* ger: muda a cada fala nova, para ignorar o fim das frases canceladas;
+     aberta: ainda está chegando texto da IA; buf: trecho que ainda não fechou uma frase */
+  var fala = { ger: 0, restam: 0, aberta: false, buf: '' };
+  function enunciar(frase) {
+    frase = paraFala(frase).trim();
+    if (!vozLigada || !sint || !/[0-9A-Za-zÀ-ÿ]/.test(frase)) return;
+    var g = fala.ger, u = new root.SpeechSynthesisUtterance(frase);
+    u.lang = 'pt-BR'; if (vozEscolhida) u.voice = vozEscolhida; u.rate = 1.06; u.pitch = 0.92;
+    u.onend = u.onerror = function () { if (g === fala.ger && --fala.restam <= 0 && !fala.aberta && estado === 'falando') definirEstado('parado'); };
+    fala.restam++;
+    if (estado !== 'falando') definirEstado('falando');
+    sint.speak(u);
+  }
+  function pararFala() {
+    fala.ger++; fala.restam = 0; fala.aberta = false; fala.buf = '';
+    if (sint) sint.cancel();
+    if (estado === 'falando') definirEstado('parado');
+  }
+  function falar(texto) {
+    pararFala();
+    if (vozLigada && sint && texto) cortarFrases(texto, true).frases.forEach(enunciar);
+    if (fala.restam <= 0) definirEstado('parado');
+  }
+  /* fala ao vivo: as frases são ditas conforme o texto chega */
+  function abrirFala() { pararFala(); fala.aberta = true; }
+  function alimentarFala(pedaco) {
+    if (!fala.aberta) return;
+    var c = cortarFrases(fala.buf + pedaco, false);
+    fala.buf = c.resto; c.frases.forEach(enunciar);
+  }
+  function fecharFala() {
+    if (fala.aberta) enunciar(fala.buf);
+    fala.aberta = false; fala.buf = '';
+    if (fala.restam <= 0 && estado !== 'ouvindo') definirEstado('parado');
+  }
   function definirVoz(ligada) {
     vozLigada = !!ligada; if (!vozLigada) pararFala();
     S.guarda.gravar('torre.voz', vozLigada);
@@ -276,7 +497,7 @@
   function alternarMic() {
     if (!Rec) return bolha('jarvis', 'Este navegador não tem reconhecimento de voz. Use o Chrome ou o Edge, ou escreva a pergunta.');
     if (ouvindo) { rec.stop(); return; }
-    pararFala();
+    interromper(); /* falar por cima do Jarvis corta a resposta em andamento */
     rec = new Rec(); rec.lang = 'pt-BR'; rec.interimResults = true; rec.maxAlternatives = 1;
     var final = '';
     rec.onstart = function () { ouvindo = true; definirEstado('ouvindo'); $('jvMic').classList.add('on'); $('jvTexto').placeholder = 'Ouvindo…'; };
@@ -312,7 +533,9 @@
     box.appendChild(d);
     while (box.children.length > 60) box.removeChild(box.firstChild);
     box.scrollTop = box.scrollHeight;
+    return d;
   }
+  function rolar() { var box = $('jvMsgs'); if (box) box.scrollTop = box.scrollHeight; }
   function abrir(aberto) {
     var p = $('jvPainel'), on = aberto == null ? p.hidden : aberto;
     p.hidden = !on; $('jvOrbe').setAttribute('aria-expanded', on);
@@ -345,7 +568,7 @@
     root.requestAnimationFrame(quadro);
   }
 
-  var SUGESTOES = ['Resumo do dia', 'Como estão as vendas?', 'Quanto ainda dá para gastar?', 'Abra o Mega Brain', 'Próximas reuniões'];
+  var SUGESTOES = ['Resumo do dia', 'Como dividir meu salário?', 'O que falta para lançar a empresa?', 'Mostre os produtos', 'Entre na sala de prospecção', 'Como estão as vendas?', 'Próximas reuniões'];
 
   function montar(callbacks) {
     S = T.Sim; cb = callbacks || {};
@@ -373,7 +596,7 @@
     interpretar: interpretar, estado: function () { return estado; }, iaAtiva: function () { return ia.ativa; },
     saudar: function () {
       var h = S.hoje;
-      T.Jarvis.falar(saudacaoHora() + '. Bem-vindo à torre da ' + S.nomeEmpresa() + '. Os 8 andares estão operando: ' + F.int(S.agentesAtivos()) + ' agentes ativos e ' + F.int(h.vendas) + ' sites vendidos hoje. Clique em um andar para entrar, ou me pergunte o que quiser.');
+      T.Jarvis.falar(saudacaoHora() + '. Bem-vindo à torre da ' + S.nomeEmpresa() + '. Os ' + T.ANDARES.length + ' andares estão operando: ' + F.int(S.agentesAtivos()) + ' agentes ativos e ' + F.int(h.vendas) + ' sites vendidos hoje. Clique em um andar para entrar e em uma sala para ver por dentro, ou me pergunte o que quiser.');
     }
   };
 })(window);

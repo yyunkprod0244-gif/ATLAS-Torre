@@ -15,7 +15,9 @@
   var T = root.Torre, F = T.fmt, esc = T.esc, S = null, cena = null;
   var $ = function (id) { return document.getElementById(id); };
 
-  var andarAberto = 0, abaAtual = 'geral', fichaAberta = null, blocos = [], listaV = null, filtro = {}, tabela14 = false;
+  /* fichaAberta: { n, i } = ficha de um agente · { livro: id } = livro aberto para leitura.
+     salaAberta: índice da sala (squad) em que a câmera está, ou -1. */
+  var andarAberto = 0, abaAtual = 'geral', salaAberta = -1, fichaAberta = null, blocos = [], listaV = null, filtro = {}, tabela14 = false;
   var RAMPA_FUNIL = ['#7e3416', '#ad471e', '#db6333', '#e89b7d']; /* rampa de um só tom, validada */
 
   var ICO = {
@@ -24,7 +26,10 @@
     torre: 'M8 21V7l4-4 4 4v14M5 21h14M10 10h4M10 13.5h4M10 17h4',
     resumo: 'M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5',
     som: 'M4 10v4h3l5 4V6L7 10H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
-    copiar: 'M9 9h10v11H9zM5 15V4h10'
+    copiar: 'M9 9h10v11H9zM5 15V4h10',
+    livro: 'M12 6.5C9.8 4.9 7 4.5 4 5v13c3-.5 5.8-.1 8 1.5 2.2-1.6 5-2 8-1.5V5c-3-.5-5.8-.1-8 1.5zM12 6.5v13',
+    certo: 'M5 12.5l4.5 4.5L19 7.5',
+    externo: 'M14 5h5v5M19 5l-8 8M11 7H6v11h11v-5'
   };
   function ico(c, cls) { return '<svg class="ico' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="' + c + '"/></svg>'; }
   function ord(n) { return n + 'º'; }
@@ -127,6 +132,63 @@
      ======================================================================== */
   var B = {
     kpis: { vivo: true, render: function (n) { return '<div class="ladrilhos">' + S.kpis(n).map(ladrilho).join('') + '</div>'; } },
+
+    /* as salas do andar (uma por squad): clicar leva a câmera para dentro da sala */
+    salas: {
+      render: function (n) {
+        var a = T.andar(n), trab = a.squads.map(function () { return 0; });
+        a.agentes.forEach(function (g) { if (g.status === 'trabalhando') trab[g.squad]++; });
+        var s = '<h3 class="b-tit">Salas do andar <small>clique para entrar e ver por dentro</small></h3><div class="salas">' + a.squads.map(function (q, k) {
+          return '<button class="sala-bt' + (k === salaAberta ? ' on' : '') + '" type="button" data-sala="' + k + '"' + (k === salaAberta ? ' aria-current="true"' : '') + '><i>' + (k + 1) + '</i><span><b>' + esc(q.nome) + '</b><small>' + F.int(q.qtd) + ' agentes · ' + F.int(trab[k]) + ' ativos</small></span></button>';
+        }).join('') + '</div>';
+        if (salaAberta >= 0 && a.squads[salaAberta]) {
+          var q = a.squads[salaAberta], inv = T.inventario(a, salaAberta);
+          s += '<div class="sala sala-ficha" id="salaFicha"><div class="sala-topo"><span class="tag">Sala ' + a.n + '.' + (salaAberta + 1) + '</span><span class="aovivo"><i></i>' + F.int(trab[salaAberta]) + ' de ' + F.int(q.qtd) + ' trabalhando</span></div>' +
+            '<p class="sala-tit">' + esc(q.nome) + '</p><p class="sala-txt">Cargos: ' + esc(q.cargos.join(' e ')) + '.</p>' +
+            '<p class="sala-txt">Mobília montada sozinha: ' + F.int(inv.estacoes) + ' estações de trabalho (mesa, computador e cadeira)' + inv.itens.map(function (x) { return ', ' + x.texto; }).join('') + '.</p>' +
+            (function () {
+              var ext = T.skillsExternasDe ? T.skillsExternasDe(n, salaAberta) : [];
+              return ext.length ? '<p class="sala-txt">Skill externa desta sala: ' + ext.map(function (s) { return '<a href="#ext-' + esc(s.id) + '" data-ext="' + esc(s.id) + '">' + esc(s.nome) + '</a>'; }).join(', ') + ' (não instalada).</p>' : '';
+            })() +
+            '<p class="b-nota">Arraste para girar, use a roda do mouse para aproximar e clique em um agente para abrir a ficha.</p>' +
+            '<div class="sala-acoes"><button class="bt bt-cor bt-mini" type="button" data-acao="agentesDaSala">Ver agentes da sala</button><button class="bt bt-mini" type="button" data-acao="fecharSala">' + ico(ICO.voltar) + 'Voltar para o andar</button></div></div>';
+        }
+        return s;
+      }
+    },
+
+    /* projetos reais do GitHub ligados a este andar (js/skills-externas.js): só catalogados, não instalados */
+    externas: {
+      render: function (n) {
+        var lista = T.skillsExternasDe ? T.skillsExternasDe(n) : [], a = T.andar(n), grupos = [];
+        if (!lista.length) return '';
+        /* agrupadas por sala, na ordem das salas do andar */
+        a.squads.forEach(function (q, k) {
+          var daSala = lista.filter(function (s) { return T.lugarDaSkill(s).k === k; });
+          if (daSala.length) grupos.push('<h4 class="ag-grupo"><button class="ex-sala" type="button" data-sala="' + k + '">Sala ' + esc(q.nome) + '</button></h4>' + daSala.map(function (s) { return cartaoExterna(s); }).join(''));
+        });
+        return '<h3 class="b-tit">Skills externas <small>' + lista.length + ' ' + (lista.length === 1 ? 'projeto' : 'projetos') + ' do GitHub ligados a este andar</small></h3><div class="externas">' + grupos.join('') + '</div>' +
+          '<p class="b-nota">Antes de instalar qualquer skill, passe-a pelo SkillSpector e leia o código: ela roda com as mesmas permissões do seu agente.</p>';
+      }
+    },
+
+    /* a biblioteca do andar de estudo: cada livro é um conteúdo diferente */
+    estante: {
+      render: function (n) {
+        var a = T.andar(n), lc = S.lancamento(), pl = S.planoLancamento(), acervo = T.BIBLIOTECA || [];
+        var s = '<h3 class="b-tit">Estante <small>cada livro é um conteúdo diferente</small></h3>';
+        a.squads.forEach(function (q, k) {
+          var livros = acervo.filter(function (b) { return b.sala === k; });
+          if (!livros.length) return;
+          s += '<div class="prateleira"><h4 class="ag-grupo">' + esc(q.nome) + '</h4><div class="livros">' + livros.map(function (b) {
+            var lido = S.lido(b.id), selo = b.tipo === 'lancamento' ? lc.feitos + ' de ' + lc.total + ' passos' : b.tipo === 'plano' && pl.dia ? 'Dia ' + Math.min(pl.dia, 90) + ' de 90' : b.tipo ? 'Guia prático' : b.min + ' min';
+            return '<button class="livro' + (lido ? ' lido' : '') + '" type="button" data-livro="' + esc(b.id) + '" style="--capa:' + (q.corLivro || a.cor) + '"><span class="lv-selo">' + esc(selo) + '</span><b>' + esc(b.titulo) + '</b><small>' + esc(b.sub) + '</small>' +
+              (lido ? '<span class="lv-lido">' + ico(ICO.certo) + 'lido</span>' : '') + '</button>';
+          }).join('') + '</div></div>';
+        });
+        return s + '<p class="b-nota">Os livros também estão na estante giratória no centro do andar: clique em uma capa para abrir.</p>';
+      }
+    },
 
     registrar: {
       render: function () {
@@ -287,7 +349,10 @@
       }
     }
   };
-  var PLANTA = { 1: ['kpis', 'registrar', 'caixa'], 2: ['kpis', 'funil', 'vendas'], 3: ['kpis', 'campanhas'], 4: ['kpis', 'fila'], 5: ['kpis', 'redes', 'posts'], 6: ['kpis', 'orcamento', 'linha14', 'contas'], 7: ['kpis', 'sala', 'formReuniao', 'agenda'], 8: ['kpis', 'resumo', 'fluxo', 'historico'] };
+  var PLANTA = {
+    1: ['kpis', 'salas', 'registrar', 'caixa'], 2: ['kpis', 'salas', 'funil', 'vendas'], 3: ['kpis', 'salas', 'campanhas'], 4: ['kpis', 'salas', 'fila'], 5: ['kpis', 'salas', 'redes', 'posts'],
+    6: ['kpis', 'salas', 'orcamento', 'linha14', 'contas'], 7: ['kpis', 'salas', 'sala', 'formReuniao', 'agenda'], 8: ['kpis', 'salas', 'resumo', 'fluxo', 'historico'], 9: ['kpis', 'estante', 'salas']
+  };
 
   function desenharBloco(id) {
     var el = document.querySelector('#pCorpo [data-b="' + id + '"]');
@@ -317,7 +382,9 @@
      ABAS
      ======================================================================== */
   function abaGeral(n) {
-    blocos = PLANTA[n];
+    blocos = (PLANTA[n] || ['kpis', 'salas']).slice();
+    /* andares com skills externas ganham o bloco logo depois das salas */
+    if (T.skillsExternasDe && T.skillsExternasDe(n).length) blocos.splice(blocos.indexOf('salas') + 1, 0, 'externas');
     $('pCorpo').innerHTML = blocos.map(function (id) { return '<section class="bloco" data-b="' + id + '"></section>'; }).join('') + '<p class="rodape-sim">Dados simulados · editáveis em js/config.js</p>';
     blocos.forEach(desenharBloco);
   }
@@ -344,6 +411,7 @@
       listaV.definir(lista);
     }
     ['fBusca', 'fSquad', 'fEstado'].forEach(function (id) { $(id).addEventListener('input', aplicar); });
+    if (salaAberta >= 0) $('fSquad').value = String(salaAberta);   /* dentro de uma sala, a lista já abre filtrada por ela */
     aplicar();
   }
 
@@ -392,10 +460,17 @@
      ======================================================================== */
   function margem() { return root.innerWidth > 900 ? $('painel').offsetWidth + 16 : 0; }
 
+  /* mantém no endereço onde você está: #andar=3, #andar=3&sala=2, #andar=9&livro=salario */
+  function endereco() {
+    var h = andarAberto ? '#andar=' + andarAberto + (fichaAberta && fichaAberta.livro ? '&livro=' + fichaAberta.livro : salaAberta >= 0 ? '&sala=' + (salaAberta + 1) : '') : '';
+    try { root.history.replaceState(null, '', h || (root.location.pathname + root.location.search)); } catch (e) { /* endereço não pode ser alterado (ex.: file://) */ }
+  }
+
   function abrirAndar(n, o) {
     o = o || {};
     var a = T.andar(n); if (!a) return;
     var mudou = n !== andarAberto;
+    if (mudou || !o.manterSala) salaAberta = -1;
     andarAberto = n; filtro = {};
     var p = $('painel');
     p.style.setProperty('--cor', a.cor);
@@ -409,18 +484,40 @@
     marcarElevador(n);
     definirAba(o.aba || (mudou ? 'geral' : abaAtual));
     if (!o.semCamera) cena.irPara(n);
-    try { root.history.replaceState(null, '', '#andar=' + n); } catch (e) { /* endereço não pode ser alterado (ex.: file://) */ }
+    endereco();
     if (cb.aoAbrirAndar) cb.aoAbrirAndar(n);
   }
   function fechar() {
     if (!andarAberto) { cena.irPara(0); return; }
-    andarAberto = 0; fecharFicha(true);
+    fecharFicha(true);
+    andarAberto = 0; salaAberta = -1;
     var p = $('painel');
     p.classList.remove('aberto');
     setTimeout(function () { if (!andarAberto) p.hidden = true; }, 320);
     document.body.classList.remove('com-painel');
     cena.margemDireita(0); cena.irPara(0); marcarElevador(0);
-    try { root.history.replaceState(null, '', root.location.pathname + root.location.search); } catch (e) { /* idem */ }
+    endereco();
+  }
+
+  /* ---------- salas: zoom no interior da sala de um squad ---------- */
+  function abrirSala(n, k, o) {
+    var a = T.andar(n);
+    if (!a || !a.squads[k]) return;
+    if (andarAberto !== n) abrirAndar(n, { semCamera: true, aba: 'geral' });
+    fecharFicha(true);
+    salaAberta = k;
+    if (abaAtual === 'agentes') definirAba('agentes');
+    else if (abaAtual === 'geral') { desenharBlocoForcado('salas'); var f = $('salaFicha'); if (f && f.scrollIntoView) f.scrollIntoView({ block: 'nearest' }); }
+    cena.irParaSala(n, k, o);
+    endereco();
+  }
+  function fecharSala() {
+    if (salaAberta < 0) return;
+    fecharFicha(true);
+    salaAberta = -1;
+    if (abaAtual === 'geral') desenharBlocoForcado('salas');
+    if (andarAberto) cena.irPara(andarAberto);
+    endereco();
   }
   function marcarElevador(n) {
     Array.prototype.forEach.call(document.querySelectorAll('#elevador .el-bt'), function (b) {
@@ -434,7 +531,7 @@
   function abrirAgente(n, i, o) {
     o = o || {};
     var a = T.andar(n), g = a && a.agentes[i]; if (!g) return;
-    if (andarAberto !== n || abaAtual !== 'agentes') abrirAndar(n, { aba: 'agentes', semCamera: true });
+    if (andarAberto !== n || abaAtual !== 'agentes') abrirAndar(n, { aba: 'agentes', semCamera: true, manterSala: true });
     fichaAberta = { n: n, i: i };
     var f = S.fracDia(), el = $('ficha');
     el.innerHTML = '<button class="bt bt-mini" type="button" data-acao="fecharFicha">' + ico(ICO.voltar) + 'Voltar para a lista</button>' +
@@ -450,9 +547,213 @@
   }
   function fecharFicha(silencioso) {
     if (!fichaAberta) return;
+    var eraLivro = !!fichaAberta.livro;
     fichaAberta = null; $('ficha').hidden = true; $('painel').classList.remove('com-ficha');
     cena.limparFoco();
-    if (!silencioso && andarAberto) cena.irPara(andarAberto);
+    if (eraLivro && abaAtual === 'geral') { desenharBlocoForcado('estante'); desenharBlocoForcado('kpis'); }
+    if (!silencioso && andarAberto) {
+      if (salaAberta >= 0) cena.irParaSala(andarAberto, salaAberta); else cena.irPara(andarAberto);
+      endereco();
+    }
+  }
+
+  /* ==========================================================================
+     LIVROS DO ANDAR DE ESTUDO
+     O livro abre no lugar da ficha. Dois livros são guias interativos:
+     o do salário (com calculadora) e o do lançamento da empresa (checklist).
+     ======================================================================== */
+  function licoesHTML(lista) { return '<ol class="licoes">' + lista.map(function (x) { return '<li><b>' + esc(x[0]) + '</b><p>' + esc(x[1]) + '</p></li>'; }).join('') + '</ol>'; }
+  function alerta(tipo, sinal, texto) { return '<p class="alerta ' + tipo + '"><i aria-hidden="true">' + sinal + '</i><span>' + texto + '</span></p>'; }
+
+  function planoSalarioHTML(p) {
+    var max = Math.max.apply(null, p.linhas.map(function (l) { return l.valor; })) || 1;
+    var nota = p.situacao === 'sobra' ? alerta('ok', '✓', 'Seus essenciais ficam ' + F.brl(p.sobra) + ' abaixo do teto de 55%. A diferença foi para a reserva.')
+      : p.situacao === 'aperto' ? alerta('aviso', '▲', 'Seus essenciais passam do teto de 55% (' + F.brl(p.teto) + '). Para fechar a conta, o plano cortou primeiro a folga e o lazer.')
+      : p.situacao === 'estouro' ? alerta('critico', '✕', 'Mesmo com tudo no mínimo, faltam ' + F.brl(p.falta) + ' por mês. É preciso reduzir um gasto fixo ou aumentar a renda.') : '';
+    return '<h4 class="b-tit">Como dividir ' + F.brl(p.valor) + ' <small>por mês</small></h4>' + nota + '<div class="barras envelopes">' + p.linhas.map(function (l) {
+      return '<div class="br-linha"' + dica(F.brl(l.valor), l.nome + ' · ' + F.pct(l.pct) + ' do salário') + '><span class="br-nome">' + esc(l.nome) + '<small>' + esc(l.desc) + '</small></span>' +
+        '<span class="br-trilho"><i class="br-barra" style="width:' + Math.max(1.5, l.valor / max * 100).toFixed(1) + '%"></i><b class="br-val">' + F.brl(l.valor) + '</b></span>' +
+        '<span class="br-extra">' + F.pct(l.pct) + ' do salário' + (l.semana != null ? ' · ' + F.brl(l.semana) + ' por semana' : '') + '</span></div>';
+    }).join('') + '</div><h4 class="b-tit">Passo a passo</h4>' + licoesHTML(T.passosSalario(p, F.brl));
+  }
+  function corpoSalario() {
+    var p = S.planoSalario(), sal = S.estado.estudo.salario;
+    return '<form class="salario-form" id="formSalario" autocomplete="off"><label>Quanto cai na conta por mês (R$)<input name="valor" type="number" inputmode="numeric" min="1" step="50" value="' + p.valor + '"></label>' +
+      '<label>Seus gastos essenciais (R$) <small>opcional: aluguel, contas, mercado e transporte</small><input name="essenciais" type="number" inputmode="numeric" min="0" step="50" value="' + (sal.essenciais == null ? '' : sal.essenciais) + '" placeholder="' + p.teto + '"></label></form>' +
+      '<div id="salarioPlano">' + planoSalarioHTML(p) + '</div><p class="b-nota">É um ponto de partida para organizar o mês, não uma recomendação de investimento. Ajuste as fatias à sua realidade.</p>';
+  }
+  function corpoLancamento() {
+    var lc = S.lancamento();
+    var s = '<div class="lanc-topo"><div class="h-val">' + F.pct(lc.fracao) + '</div><div class="h-rot">' + lc.feitos + ' de ' + lc.total + ' passos concluídos</div><div class="md-grande">' + medidor(lc.fracao) + '</div>' +
+      (lc.proximos.length ? '<p class="b-nota">Próximo passo: <b>' + esc(lc.proximos[0].texto) + '</b></p>' : '<p class="b-nota">Tudo concluído: a empresa está no ar.</p>') + '</div>';
+    T.LANCAMENTO.forEach(function (f, i) {
+      s += '<fieldset class="fase"><legend><b>' + (i + 1) + '. ' + esc(f.fase) + '</b><small>' + esc(f.prazo) + ' · ' + lc.fases[i].feitos + ' de ' + lc.fases[i].total + '</small></legend>' + f.itens.map(function (it) {
+        return '<label class="passo"><input type="checkbox" data-passo="' + esc(it[0]) + '"' + (S.passoFeito(it[0]) ? ' checked' : '') + '><span><b>' + esc(it[1]) + '</b><small>' + esc(it[2]) + '</small></span></label>';
+      }).join('') + '</fieldset>';
+    });
+    return s;
+  }
+  /* ---------- plano de 90 dias com R$ 3.000 ---------- */
+  function divisaoPlanoHTML(pl) {
+    var d = pl.divisao, max = Math.max.apply(null, d.linhas.map(function (l) { return l.valor; })) || 1, prod = (T.CATALOGO && T.CATALOGO.produtos || []).filter(function (p) { return !p.mensal; })[0];
+    var nota = d.situacao === 'curto' ? alerta('critico', '✕', 'Com menos de ' + F.brl(d.fixos) + ', comece só pelo essencial: domínio, WhatsApp Business e prospecção. Formalize quando fechar o primeiro contrato.')
+      : d.situacao === 'sem-anuncio' ? alerta('aviso', '▲', 'Com menos de R$ 1.500, deixe os anúncios para depois da primeira venda: a prospecção direta não custa nada.') : '';
+    return '<h4 class="b-tit">Onde colocar ' + F.brl(d.valor) + '</h4>' + nota + '<div class="barras envelopes">' + d.linhas.map(function (l) {
+      return '<div class="br-linha"' + dica(F.brl(l.valor), l.nome + ' · ' + l.quando) + '><span class="br-nome">' + esc(l.nome) + '<small>' + esc(l.desc) + '</small></span>' +
+        '<span class="br-trilho"><i class="br-barra" style="width:' + Math.max(1.5, l.valor / max * 100).toFixed(1) + '%"></i><b class="br-val">' + F.brl(l.valor) + '</b></span>' +
+        '<span class="br-extra">' + esc(l.quando) + ' · ' + F.pct(l.pct) + ' do total</span></div>';
+    }).join('') + '</div>' +
+      '<p class="b-nota">Depois do lançamento, os custos fixos ficam em cerca de ' + F.brl(T.PLANO.custoMensal) + ' por mês (imposto e ferramentas). ' +
+      (d.v.reserva ? 'A reserva cobre ' + (d.mesesDeFolego === 1 ? 'cerca de 1 mês' : 'cerca de ' + d.mesesDeFolego + ' meses') + ' desses custos mesmo sem nenhuma venda. ' : '') +
+      (prod ? 'Uma única ' + esc(prod.nome) + ' (' + F.brl(prod.preco) + ') paga mais de ' + Math.floor(prod.preco / T.PLANO.custoMensal) + ' meses deles.' : '') + '</p>';
+  }
+  function metasPlanoHTML(pl) {
+    return '<div class="medidores">' + pl.metas.map(function (m) {
+      var est = pl.dia && m.fracao + 0.1 < m.ritmo ? 'aviso' : '';
+      return '<div class="ml-linha"' + dica((m.dinheiro ? F.brl(m.feito) : F.int(m.feito)) + ' de ' + (m.dinheiro ? F.brl(m.meta) : F.int(m.meta)), m.nome + ' · meta dos 90 dias') + '><span class="ml-nome">' + esc(m.nome) + '</span>' + medidor(m.fracao, pl.dia ? m.ritmo : null, est) +
+        '<span class="ml-val">' + (m.dinheiro ? F.brl(m.feito) : F.int(m.feito)) + ' <small>de ' + (m.dinheiro ? F.brl(m.meta) : F.int(m.meta)) + '</small></span>' +
+        (est ? '<span class="selo aviso"><i aria-hidden="true">▲</i>abaixo do ritmo</span>' : '') + '</div>';
+    }).join('') + '</div>' + (pl.dia ? '<p class="b-nota"><em class="md-ritmo exemplo"></em> A marca vertical mostra onde você deveria estar no dia ' + Math.min(pl.dia, T.PLANO.dias) + '.</p>' : '');
+  }
+  function corpoPlano() {
+    var pl = S.planoLancamento(), P = T.PLANO, s;
+    s = '<form class="salario-form" id="formPlano" autocomplete="off"><label>Dinheiro de entrada (R$)<input name="capital" type="number" inputmode="numeric" min="0" step="100" value="' + pl.capital + '"></label>' +
+      '<div class="plano-dia">' + (pl.dia ? '<b>' + (pl.terminou ? 'Os 90 dias terminaram' : 'Dia ' + pl.dia + ' de ' + P.dias) + '</b><small>' + (pl.terminou ? 'veja o que deu certo e faça o próximo plano' : 'fase ' + (pl.fase + 1) + ': ' + esc(P.fases[pl.fase].nome)) + '</small>' +
+        '<button class="bt bt-mini" type="button" data-acao="reiniciarPlano">Zerar a contagem</button>'
+        : '<button class="bt bt-cor" type="button" data-acao="iniciarPlano">Começar o plano hoje</button><small>a torre conta os dias e mostra a fase em que você está</small>') + '</div></form>' +
+      '<div id="planoDivisao">' + divisaoPlanoHTML(pl) + '</div>' +
+      '<h4 class="b-tit">Os 90 dias, fase por fase</h4>';
+    P.fases.forEach(function (f, i) {
+      var gasta = f.gasta.map(function (id) { var l = pl.divisao.linhas.filter(function (x) { return x.id === id; })[0]; return l && l.valor ? l.nome.toLowerCase() + ' (' + F.brl(l.valor) + ')' : ''; }).filter(Boolean);
+      s += '<section class="fase-plano' + (i === pl.fase ? ' atual' : '') + '"' + (i === pl.fase ? ' aria-current="step"' : '') + '><header><span class="fp-num">' + (i + 1) + '</span><div><b>' + esc(f.nome) + '</b><small>' + esc(f.quando) + ' · dias ' + f.dias[0] + ' a ' + f.dias[1] + (i === pl.fase ? ' · você está aqui' : '') + '</small></div></header>' +
+        '<p class="fp-obj">' + esc(f.objetivo) + '</p>' + licoesHTML(f.tarefas) +
+        '<p class="fp-meta"><b>Meta da fase:</b> ' + esc(f.meta) + (gasta.length ? '<br><b>Gasta:</b> ' + esc(gasta.join(' e ')) : '<br><b>Gasta:</b> nada além do seu tempo') + '</p></section>';
+    });
+    s += '<h4 class="b-tit">Seus números <small>anote o total acumulado; fica salvo neste navegador</small></h4>' +
+      '<form class="numeros-form" id="formNumeros" autocomplete="off">' + pl.metas.map(function (m) {
+        return '<label>' + esc(m.nome) + (m.dinheiro ? ' (R$)' : '') + '<input name="' + m.id + '" type="number" inputmode="numeric" min="0" step="1" value="' + m.feito + '"></label>';
+      }).join('') + '</form><div id="planoMetas">' + metasPlanoHTML(pl) + '</div>' +
+      '<p class="b-nota">Metas dos 90 dias: 600 contatos viram cerca de 60 conversas, 20 propostas e 5 vendas. São números para medir o caminho, não promessas: se ficar abaixo do ritmo, mude a mensagem ou o nicho, não o esforço.</p>' +
+      '<h4 class="b-tit">Regras para dar certo</h4>' + licoesHTML(P.regras) +
+      '<div class="pratica"><h4>Para fazer hoje</h4><p>' + (pl.dia && !pl.terminou ? esc(P.fases[pl.fase].tarefas[0][0]) + ': ' + esc(P.fases[pl.fase].tarefas[0][1]) : 'Clique em "Começar o plano hoje", escolha o nicho e escreva em uma frase para quem você vende e qual problema resolve.') + '</p></div>' +
+      '<p class="b-nota">Valores de impostos, domínio e ferramentas são estimativas de novembro de 2026: confira os atuais antes de pagar. Este plano é um ponto de partida, não consultoria contábil ou jurídica.</p>';
+    return s;
+  }
+
+  function desenharLivro() {
+    if (!fichaAberta || !fichaAberta.livro) return;
+    var b = T.livro(fichaAberta.livro), a = T.andar(S.andarEstudo()), q = a.squads[b.sala] || {}, lido = S.lido(b.id);
+    $('ficha').innerHTML = '<button class="bt bt-mini" type="button" data-acao="fecharFicha">' + ico(ICO.voltar) + 'Voltar para a estante</button>' +
+      '<div class="livro-topo" style="--capa:' + (q.corLivro || a.cor) + '"><span class="livro-capa" aria-hidden="true">' + ico(ICO.livro) + '</span><div><h3>' + esc(b.titulo) + '</h3><p>' + esc(b.sub) + '</p><small>' + esc(q.nome || a.nome) + ' · ' + b.min + ' min de leitura</small></div></div>' +
+      '<p class="livro-resumo">' + esc(b.resumo) + '</p>' +
+      (b.tipo === 'salario' ? corpoSalario() : b.tipo === 'lancamento' ? corpoLancamento() : b.tipo === 'plano' ? corpoPlano() : licoesHTML(b.licoes) + '<div class="pratica"><h4>Para fazer hoje</h4><p>' + esc(b.pratica) + '</p></div>') +
+      '<div class="livro-acoes">' + (b.tipo === 'lancamento' ? '' : '<button class="bt bt-cor" type="button" data-acao="lerLivro" aria-pressed="' + lido + '">' + ico(ICO.certo) + (lido ? 'Lido · desmarcar' : 'Marcar como lido') + '</button>') +
+      '<button class="bt" type="button" data-acao="ouvirLivro">' + ico(ICO.som) + 'Ouvir com o Jarvis</button><button class="bt" type="button" data-acao="localizarLivro">' + ico(ICO.alvo) + 'Mostrar na estante</button></div>';
+  }
+  function abrirLivro(id, o) {
+    o = o || {};
+    var b = T.livro && T.livro(id), n = S.andarEstudo();
+    if (!b || !n) return false;
+    if (andarAberto !== n || abaAtual !== 'geral' || salaAberta >= 0) abrirAndar(n, { aba: 'geral', semCamera: true });
+    fichaAberta = { livro: b.id };
+    $('painel').style.setProperty('--cor', T.andar(n).cor);
+    desenharLivro();
+    $('ficha').hidden = false; $('ficha').scrollTop = 0;
+    $('painel').classList.add('com-ficha');
+    if (o.focar !== false) cena.focarLivro(T.BIBLIOTECA.indexOf(b));
+    endereco();
+    return true;
+  }
+  function falaDoPlano() {
+    var pl = S.planoLancamento(), P = T.PLANO, fz = pl.fase >= 0 ? P.fases[pl.fase] : P.fases[0];
+    return 'Plano de 90 dias com ' + F.brl(pl.capital) + '. Onde colocar o dinheiro: ' + pl.divisao.linhas.map(function (l) { return l.nome.toLowerCase() + ', ' + F.brl(l.valor); }).join('; ') + '. ' +
+      (pl.dia && !pl.terminou ? 'Você está no dia ' + pl.dia + ', na fase ' + fz.nome.toLowerCase() + '. ' : 'Comece pela fase 1, ' + fz.nome.toLowerCase() + '. ') +
+      'O objetivo agora: ' + fz.objetivo + ' Tarefas: ' + fz.tarefas.map(function (t) { return t[0]; }).join('; ') + '. ' +
+      'A regra mais importante: venda antes de gastar e prospecte todo dia útil, de 10 a 15 contatos por dia.';
+  }
+  /* o que o Jarvis lê em voz alta quando você pede para ouvir o livro aberto */
+  function falaDoLivro(b) {
+    if (b.tipo === 'salario') {
+      var p = S.planoSalario();
+      return 'Como dividir um salário de ' + F.brl(p.valor) + '. ' + p.linhas.map(function (l) { return l.nome + ': ' + F.brl(l.valor); }).join('; ') + '. ' +
+        T.passosSalario(p, F.brl).map(function (x, i) { return 'Passo ' + (i + 1) + ': ' + x[0] + '. ' + x[1]; }).join(' ');
+    }
+    if (b.tipo === 'plano') return falaDoPlano();
+    if (b.tipo === 'lancamento') {
+      var lc = S.lancamento();
+      return 'Lançamento da empresa: ' + lc.feitos + ' de ' + lc.total + ' passos concluídos. ' + (lc.proximos.length ? 'Os próximos são: ' + lc.proximos.slice(0, 4).map(function (x) { return x.texto; }).join('; ') + '.' : 'Tudo concluído. A empresa está no ar.');
+    }
+    return T.textoDoLivro(b);
+  }
+
+  /* ==========================================================================
+     SKILLS EXTERNAS (projetos do GitHub, js/skills-externas.js)
+     ======================================================================== */
+  /* cartão de uma skill. o.catalogo: versão do catálogo geral (com o lugar na torre, sem id de âncora) */
+  function cartaoExterna(s, o) {
+    o = o || {};
+    var l = T.lugarDaSkill(s);
+    return '<article class="externa"' + (o.catalogo ? ' style="--cor:' + (l ? l.andar.cor : 'var(--gelo)') + '"' : ' id="ext-' + esc(s.id) + '"') + '><div class="ex-topo"><b>' + esc(s.nome) + '</b><span class="tag">não instalada</span></div>' +
+      '<p class="ex-tipo">' + esc(s.tipo) + ' · ' + esc(s.licenca) + '</p>' +
+      '<p class="ex-resumo">' + esc(s.resumo) + '</p><p class="ex-uso"><b>Aqui serve para:</b> ' + esc(s.uso) + '</p>' +
+      '<details class="ex-mais"><summary>O que faz, como instalar e cuidados</summary>' +
+      '<ul class="ex-faz">' + s.faz.map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ul>' +
+      '<h4>Precisa de</h4><p>' + esc(s.precisa) + '</p><h4>Como instalar</h4><pre class="ex-cmd">' + esc(s.instalar) + '</pre>' +
+      '<p class="alerta aviso"><i aria-hidden="true">▲</i><span><b>Atenção:</b> ' + esc(s.atencao) + '</span></p></details>' +
+      '<div class="ex-acoes"><a class="bt bt-mini" href="https://github.com/' + esc(s.repo) + '" target="_blank" rel="noopener noreferrer">' + ico(ICO.externo) + 'Ver no GitHub</a>' +
+      (o.catalogo && l ? '<button class="bt bt-mini" type="button" data-ext="' + esc(s.id) + '">' + ico(ICO.alvo) + 'Ver na torre</button>' : '') + '</div></article>';
+  }
+
+  /* catálogo completo (botão "Skills" do topo), agrupado por andar */
+  function abrirSkillsExternas() {
+    var lista = T.SKILLS_EXTERNAS || [], ign = T.SKILLS_IGNORADAS || [], m = $('modal'), html = '';
+    T.ANDARES.forEach(function (a) {
+      var doAndar = lista.filter(function (s) { var l = T.lugarDaSkill(s); return l && l.andar.n === a.n; });
+      if (!doAndar.length) return;
+      html += '<section class="ex-andar"><h3>' + ponto(a.cor) + ord(a.n) + ' andar · ' + esc(a.nome) + ' <small>' + doAndar.length + '</small></h3><div class="ex-grade">' +
+        doAndar.map(function (s) { return '<div class="ex-celula"><p class="ex-onde">Sala ' + esc(s.sala) + '</p>' + cartaoExterna(s, { catalogo: true }) + '</div>'; }).join('') + '</div></section>';
+    });
+    m.innerHTML = '<div class="modal-fundo" data-acao="fecharModal"></div><div class="modal-caixa modal-skills vidro" role="dialog" aria-modal="true" aria-labelledby="mTit"><header><div><h2 id="mTit">Skills externas</h2>' +
+      '<p>' + lista.length + ' projetos do GitHub catalogados nos andares e salas da torre · nenhum instalado · a lista fica em js/skills-externas.js</p></div><button class="bt-icone" type="button" data-acao="fecharModal" aria-label="Fechar skills externas">' + ico(ICO.fechar) + '</button></header>' +
+      '<div class="modal-corpo"><p class="alerta aviso"><i aria-hidden="true">▲</i><span>Skills rodam com as mesmas permissões do seu agente. Antes de instalar, passe cada uma pelo <b>SkillSpector</b> (8º andar) e leia o código.</span></p>' + html +
+      (ign.length ? '<section class="ex-andar"><h3>Não catalogadas</h3><ul class="ex-ignoradas">' + ign.map(function (x) { return '<li><b>' + esc(x.repo) + '</b> · ' + esc(x.motivo) + '</li>'; }).join('') + '</ul></section>' : '') + '</div></div>';
+    focoAntes = document.activeElement; m.hidden = false;
+    m.querySelector('header .bt-icone').focus();
+  }
+
+  /* abre o andar da skill externa e rola até o cartão dela, já com os detalhes abertos */
+  function mostrarSkillExterna(id) {
+    fecharModal();
+    var s = T.skillExterna && T.skillExterna(id), l = s && T.lugarDaSkill(s);
+    if (!l) return false;
+    if (andarAberto !== l.andar.n || abaAtual !== 'geral' || fichaAberta) abrirAndar(l.andar.n, { aba: 'geral', manterSala: andarAberto === l.andar.n });
+    var el = $('ext-' + id);
+    if (el) {
+      var d = el.querySelector('details'); if (d) d.open = true;
+      el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      el.classList.add('piscar'); setTimeout(function () { el.classList.remove('piscar'); }, 1600);
+    }
+    return true;
+  }
+
+  /* ==========================================================================
+     PRODUTOS DA EMPRESA (botão do topo) — vêm de site/catalogo.js
+     ======================================================================== */
+  function abrirProdutos() {
+    var prods = (T.CATALOGO && T.CATALOGO.produtos) || [], vend = S.vendasPorPlano(), m = $('modal');
+    m.innerHTML = '<div class="modal-fundo" data-acao="fecharModal"></div><div class="modal-caixa modal-produtos vidro" role="dialog" aria-modal="true" aria-labelledby="mTit"><header><div><h2 id="mTit">Produtos</h2>' +
+      '<p>' + esc(S.nomeEmpresa()) + ' · ' + prods.length + ' produtos à venda · nomes e preços ficam em site/catalogo.js</p></div><button class="bt-icone" type="button" data-acao="fecharModal" aria-label="Fechar produtos">' + ico(ICO.fechar) + '</button></header>' +
+      '<div class="modal-corpo">' + (prods.length ? '<div class="produtos">' + prods.map(function (p) {
+        var hoje = vend[p.nome + (p.mensal ? ' (mensal)' : '')] || 0;
+        return '<article class="produto' + (p.recomendado ? ' rec' : '') + '"><div class="pd-topo"><h3>' + esc(p.nome) + '</h3>' + (p.recomendado ? '<span class="tag">Recomendado</span>' : '') + '</div>' +
+          '<p class="pd-preco"><b>' + F.brl(p.preco) + '</b><span>' + (p.mensal ? 'por mês' : 'pagamento único') + '</span></p>' +
+          '<p class="pd-resumo">' + esc(p.resumo) + '</p><ul class="pd-itens">' + (p.itens || []).map(function (i) { return '<li>' + ico(ICO.certo) + '<span>' + esc(i) + '</span></li>'; }).join('') + '</ul>' +
+          '<p class="pd-ideal"><b>Ideal para:</b> ' + esc(p.ideal || '') + '</p>' +
+          '<dl class="pd-dados"><div><dt>Prazo</dt><dd>' + esc(p.prazo || '—') + '</dd></div><div><dt>Tamanho</dt><dd>' + esc(p.tamanho || '—') + '</dd></div><div><dt>Vendas hoje</dt><dd>' + F.int(hoje) + ' <small>simuladas</small></dd></div></dl></article>';
+      }).join('') + '</div>' : '<p class="vazio">Nenhum produto cadastrado. Confira se o arquivo site/catalogo.js está sendo carregado.</p>') + '</div>' +
+      '<footer><a class="bt bt-cor" href="site/index.html" target="_blank" rel="noopener">' + ico(ICO.externo) + 'Abrir o site de vendas</a><button class="bt" type="button" data-acao="irVendas">Ir para o andar de Vendas</button></footer></div>';
+    focoAntes = document.activeElement; m.hidden = false;
+    m.querySelector('header .bt-icone').focus();
   }
 
   /* ==========================================================================
@@ -476,7 +777,9 @@
   function dicaCena(info) {
     if (!info) { if (dicaDaCena) esconderDica(); return; }
     var a = T.andar(info.andar);
-    if (info.tipo === 'agente') { var g = a.agentes[info.idx]; mostrarDica(info.x, info.y, g.nome, g.cargo + ' · ' + (ESTADOS[g.status] || ESTADOS.ocioso).nome.toLowerCase()); }
+    if (info.tipo === 'livro') { var b = (T.BIBLIOTECA || [])[info.livro]; if (!b) return; mostrarDica(info.x, info.y, b.titulo, b.sub + ' · clique para abrir'); }
+    else if (info.tipo === 'sala') { var q = a.squads[info.sala]; mostrarDica(info.x, info.y, 'Sala ' + q.nome, F.int(q.qtd) + ' agentes · clique para entrar'); }
+    else if (info.tipo === 'agente') { var g = a.agentes[info.idx]; mostrarDica(info.x, info.y, g.nome, g.cargo + ' · ' + (ESTADOS[g.status] || ESTADOS.ocioso).nome.toLowerCase()); }
     else mostrarDica(info.x, info.y, ord(a.n) + ' andar · ' + a.nome, F.int(a.agentes.length) + ' agentes · clique para entrar');
     dicaDaCena = true;
   }
@@ -526,7 +829,16 @@
     $('placar').innerHTML = S.kpisGlobais().map(function (k) { return '<div class="pl-item"><span>' + esc(k.rotulo) + '</span><b>' + esc(k.valor) + '</b></div>'; }).join('');
     var d = new Date(); $('relogioHora').textContent = F.hora(d); $('relogioData').textContent = F.dataMedia(d);
   }
-  function nomeEmpresa() { var n = S.nomeEmpresa(); $('empresaNome').textContent = n; document.title = n + ' — Torre de comando'; var i = $('introNome'); if (i) i.textContent = n; }
+  /* a primeira palavra do nome vira a marca em destaque; o restante vai na linha de baixo */
+  function nomeEmpresa() {
+    var n = S.nomeEmpresa(), partes = n.split(/\s+/), marca = partes[0].toUpperCase(), resto = partes.slice(1).join(' ');
+    var bt = $('empresaNome'), sub = $('empresaSub'), i = $('introNome'), is = $('introSub');
+    bt.textContent = marca; bt.setAttribute('aria-label', n + '. Clique para trocar o nome da empresa');
+    if (sub) sub.textContent = resto || 'Torre de comando';
+    document.title = n + ' — Torre de comando';
+    if (i) i.textContent = marca;
+    if (is) is.textContent = resto ? resto + ' · Torre de comando' : 'Torre de comando';
+  }
 
   function montar(cenaRef, callbacks) {
     S = T.Sim; cena = cenaRef; cb = callbacks || {};
@@ -539,17 +851,37 @@
 
     /* cliques (delegados) */
     document.addEventListener('click', function (e) {
-      var t = e.target.closest('[data-n],[data-aba],[data-agente],[data-acao],[data-ir],[data-remover]');
+      var t = e.target.closest('[data-n],[data-aba],[data-agente],[data-sala],[data-livro],[data-ext],[data-acao],[data-ir],[data-remover]');
       if (!t) return;
       if (t.dataset.n != null && t.closest('#elevador')) return +t.dataset.n ? abrirAndar(+t.dataset.n) : fechar();
       if (t.dataset.aba) return definirAba(t.dataset.aba);
       if (t.dataset.agente != null) return abrirAgente(andarAberto, +t.dataset.agente);
+      if (t.dataset.sala != null) return abrirSala(andarAberto, +t.dataset.sala);
+      if (t.dataset.livro) return abrirLivro(t.dataset.livro);
+      if (t.dataset.ext) { e.preventDefault(); return mostrarSkillExterna(t.dataset.ext); }
       if (t.dataset.ir) return abrirAndar(+t.dataset.ir);
       if (t.dataset.remover) { S.removerReuniao(t.dataset.remover); return aviso('Reunião desmarcada.'); }
+      var livro = fichaAberta && fichaAberta.livro ? T.livro(fichaAberta.livro) : null;
       switch (t.dataset.acao) {
         case 'fecharPainel': return fechar();
         case 'fecharFicha': return fecharFicha();
-        case 'localizar': return fichaAberta && cena.focarAgente(fichaAberta.n, fichaAberta.i);
+        case 'localizar': return fichaAberta && fichaAberta.n && cena.focarAgente(fichaAberta.n, fichaAberta.i);
+        case 'fecharSala': return fecharSala();
+        case 'agentesDaSala': return definirAba('agentes');
+        case 'lerLivro':
+          if (!livro) return;
+          S.marcarLido(livro.id, !S.lido(livro.id)); desenharLivro();
+          return aviso(S.lido(livro.id) ? 'Livro marcado como lido.' : 'Livro desmarcado.');
+        case 'ouvirLivro': return livro && cb.aoOuvirTexto && cb.aoOuvirTexto(falaDoLivro(livro));
+        case 'localizarLivro': return livro && cena.focarLivro(T.BIBLIOTECA.indexOf(livro));
+        case 'iniciarPlano':
+        case 'reiniciarPlano':
+          var fichaEl = $('ficha'), y = fichaEl.scrollTop;
+          S.iniciarPlano(t.dataset.acao === 'iniciarPlano'); desenharLivro(); fichaEl.scrollTop = y;
+          return aviso(t.dataset.acao === 'iniciarPlano' ? 'Plano iniciado: hoje é o dia 1 de 90.' : 'Contagem zerada. Comece de novo quando quiser.');
+        case 'produtos': return abrirProdutos();
+        case 'skillsExternas': return abrirSkillsExternas();
+        case 'irVendas': fecharModal(); return abrirAndar(2);
         case 'resumo': return abrirResumo();
         case 'fecharModal': return fecharModal();
         case 'ouvirResumo': return cb.aoOuvirResumo && cb.aoOuvirResumo(S.resumo());
@@ -563,8 +895,34 @@
       if (e.target.id === 'btTabela14') { tabela14 = !tabela14; desenharBlocoForcado('linha14'); }
     });
 
+    /* guia do salário: a divisão é refeita enquanto você digita */
+    document.addEventListener('input', function (e) {
+      var f = e.target.form, el;
+      if (f && f.id === 'formPlano' && e.target.name === 'capital') {
+        if (e.target.value !== '' && +e.target.value >= 0 && (el = $('planoDivisao'))) el.innerHTML = divisaoPlanoHTML(S.definirCapital(e.target.value));
+        return;
+      }
+      if (f && f.id === 'formNumeros') {
+        if ((el = $('planoMetas'))) el.innerHTML = metasPlanoHTML(S.definirNumeroPlano(e.target.name, e.target.value));
+        return;
+      }
+      if (!f || f.id !== 'formSalario') return;
+      var p = S.definirSalario(f.valor.value, f.essenciais.value), el = $('salarioPlano');
+      if (el && +f.valor.value > 0) { el.innerHTML = planoSalarioHTML(p); f.essenciais.placeholder = p.teto; }
+    });
+    /* checklist de lançamento: marcar um passo salva na hora, sem perder a posição da leitura */
+    document.addEventListener('change', function (e) {
+      var id = e.target.dataset && e.target.dataset.passo;
+      if (!id) return;
+      S.marcarPasso(id, e.target.checked);
+      var el = $('ficha'), y = el.scrollTop;
+      desenharLivro(); el.scrollTop = y;
+      var de = el.querySelector('[data-passo="' + id + '"]'); if (de) de.focus();
+    });
+
     /* formulários */
     document.addEventListener('submit', function (e) {
+      if (e.target.id === 'formSalario' || e.target.id === 'formPlano' || e.target.id === 'formNumeros') e.preventDefault();
       if (e.target.id === 'formInfo') {
         e.preventDefault();
         var r = S.registrarInfo(e.target.texto.value);
@@ -595,13 +953,15 @@
     /* nome da empresa: clique para trocar */
     $('empresaNome').addEventListener('click', function () {
       var bt = this, inp = document.createElement('input');
-      inp.className = 'marca-edita'; inp.maxLength = 28; inp.value = S.nomeEmpresa(); inp.setAttribute('aria-label', 'Nome da empresa');
+      inp.className = 'marca-edita'; inp.maxLength = 28; inp.value = S.nomeEmpresa(); inp.setAttribute('aria-label', 'Nome da empresa (a primeira palavra vira a marca em destaque)');
       bt.hidden = true; bt.parentNode.insertBefore(inp, bt); inp.focus(); inp.select();
       function sair(salvar) { if (!inp.parentNode) return; if (salvar) S.definirNomeEmpresa(inp.value); inp.parentNode.removeChild(inp); bt.hidden = false; }
       inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') sair(true); if (e.key === 'Escape') sair(false); e.stopPropagation(); });
       inp.addEventListener('blur', function () { sair(true); });
     });
     $('btResumo').addEventListener('click', abrirResumo);
+    if ($('btProdutos')) $('btProdutos').addEventListener('click', abrirProdutos);
+    if ($('btSkills')) $('btSkills').addEventListener('click', abrirSkillsExternas);
     $('btQualidade').addEventListener('click', function () {
       var q = cena.qualidadeAtual && cena.qualidadeAtual() === 'alta' ? 'leve' : 'alta';
       cena.qualidade(q); S.guarda.gravar('torre.qualidade', q);
@@ -618,7 +978,7 @@
       contador++; placar(); empurrarFeed();
       if (andarAberto && abaAtual === 'geral') blocos.forEach(function (id) { if (B[id].vivo) desenharBloco(id); });
       if (andarAberto === 7 && abaAtual === 'geral' && contador % 20 === 0) desenharBloco('agenda');
-      if (fichaAberta) { var g = T.andar(fichaAberta.n).agentes[fichaAberta.i], el = $('fichaTarefas'); if (el) el.textContent = F.int(S.tarefasDe(g)); }
+      if (fichaAberta && fichaAberta.n) { var g = T.andar(fichaAberta.n).agentes[fichaAberta.i], el = $('fichaTarefas'); if (el) el.textContent = F.int(S.tarefasDe(g)); }
       if (contador % 5 === 0) { cena.reuniaoAtiva(S.emAndamento().length > 0); if (contador % 30 === 0) cena.orcamento(S.financeiro().usado); }
     });
     S.on('evento', function (e) {
@@ -632,6 +992,8 @@
     });
     S.on('reunioes', function () { if (andarAberto === 7 && abaAtual === 'geral') { desenharBloco('agenda'); desenharBloco('sala'); } });
     S.on('status', function (s) { cena.statusAgente(s.andar, s.idx); });
+    /* leitura marcada, salário alterado ou passo do lançamento concluído: atualiza a estante */
+    S.on('estudo', function () { if (andarAberto === S.andarEstudo() && abaAtual === 'geral' && !fichaAberta) { desenharBloco('estante'); desenharBloco('kpis'); } });
     S.on('empresa', nomeEmpresa);
     S.on('novoDia', function () { if (andarAberto) definirAba(abaAtual); });
     cena.reuniaoAtiva(S.emAndamento().length > 0); cena.orcamento(S.financeiro().usado);
@@ -640,7 +1002,8 @@
 
   T.UI = {
     montar: montar, abrirAndar: abrirAndar, fechar: fechar, definirAba: definirAba, abrirAgente: abrirAgente, fecharFicha: fecharFicha,
+    abrirSala: abrirSala, fecharSala: fecharSala, abrirLivro: abrirLivro, abrirProdutos: abrirProdutos, abrirSkillsExternas: abrirSkillsExternas, mostrarSkillExterna: mostrarSkillExterna,
     abrirResumo: abrirResumo, fecharModal: fecharModal, aviso: aviso, dicaCena: dicaCena,
-    andarAberto: function () { return andarAberto; }, fichaAberta: function () { return fichaAberta; }
+    andarAberto: function () { return andarAberto; }, salaAberta: function () { return salaAberta; }, fichaAberta: function () { return fichaAberta; }
   };
 })(window);

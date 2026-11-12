@@ -1,28 +1,38 @@
 /* ============================================================================
-   TORRE — configuração da empresa e dos 8 andares
+   TORRE — configuração da empresa e dos andares
    ----------------------------------------------------------------------------
-   Tudo aqui é fictício e foi feito para ser editado: nome da empresa, planos,
-   orçamento do mês, squads, cargos e o vocabulário que gera as skills.
+   Tudo aqui é fictício e foi feito para ser editado: orçamento do mês, squads,
+   cargos e o vocabulário que gera as skills.
+   O nome da empresa e os produtos com seus preços ficam em site/catalogo.js,
+   que é compartilhado com o site de vendas.
    Os agentes e as skills NÃO estão escritos um por um: são gerados em
    js/dados.js a partir destas listas (sempre iguais a cada carregamento).
    ========================================================================== */
 (function (root) {
   'use strict';
   var T = (root.Torre = root.Torre || {});
+  var CAT = root.ATLAS_CATALOGO || {};
 
+  /* Quanto cada produto pesa nas vendas simuladas da torre (soma livre). */
+  var PESO_VENDAS = { landing: 34, institucional: 30, blog: 14, loja: 12, presenca: 10 };
+
+  T.CATALOGO = CAT;
   T.CONFIG = {
     empresa: {
-      nome: 'ÁPICE',
-      slogan: 'Sites que vendem'
+      nome: (CAT.empresa && CAT.empresa.nome) || 'Atlas Digital Engineering',
+      slogan: (CAT.empresa && CAT.empresa.slogan) || 'Sites que vendem'
     },
 
-    /* Produtos vendidos pelo andar de Vendas (preço em R$). */
-    planos: [
-      { nome: 'Landing Page', preco: 1490, peso: 34 },
-      { nome: 'Site Institucional', preco: 2900, peso: 30 },
-      { nome: 'Site + Blog', preco: 3600, peso: 14 },
-      { nome: 'Loja Virtual', preco: 5400, peso: 12 },
-      { nome: 'Plano Presença (mensal)', preco: 890, peso: 10 }
+    /* Produtos vendidos pelo andar de Vendas (preço em R$): vêm do catálogo.
+       A lista abaixo só é usada se site/catalogo.js não for carregado. */
+    planos: CAT.produtos ? CAT.produtos.map(function (p) {
+      return { id: p.id, nome: p.nome + (p.mensal ? ' (mensal)' : ''), preco: p.preco, peso: PESO_VENDAS[p.id] || 10 };
+    }) : [
+      { id: 'landing', nome: 'Landing Page', preco: 1490, peso: 34 },
+      { id: 'institucional', nome: 'Site Institucional', preco: 2900, peso: 30 },
+      { id: 'blog', nome: 'Site + Blog', preco: 3600, peso: 14 },
+      { id: 'loja', nome: 'Loja Virtual', preco: 5400, peso: 12 },
+      { id: 'presenca', nome: 'Plano Presença (mensal)', preco: 890, peso: 10 }
     ],
 
     /* Quanto a empresa planeja gastar por mês, por categoria (R$). */
@@ -66,12 +76,13 @@
   };
 
   /* --------------------------------------------------------------------------
-     OS 8 ANDARES
+     OS ANDARES
      cor      → cor de identidade do andar (paleta validada para daltonismo
                 e contraste no fundo escuro; a ORDEM faz parte da validação,
                 então evite trocar as cores de lugar).
      qtd      → quantos agentes o andar tem (mínimo 400).
-     squads   → times do andar; "peso" define o tamanho relativo de cada um.
+     squads   → times do andar; cada squad ganha uma SALA própria, mobiliada
+                sozinha. "peso" define o tamanho relativo de cada um.
      vocab    → ações × objetos × contextos = lista de skills (mínimo 1000).
      ------------------------------------------------------------------------ */
   T.ANDARES = [
@@ -284,6 +295,35 @@
         ],
         objetos: ['informações de vendas', 'métricas de marketing', 'tarefas entre andares', 'alertas financeiros', 'pedidos de clientes', 'atas de reunião', 'status de vídeos', 'resultados de publicações', 'gargalos operacionais', 'decisões do dia', 'dados de agentes', 'prioridades da semana'],
         contextos: ['em tempo real', 'a cada hora', 'para o resumo do dia', 'para todos os andares', 'com contexto histórico', 'com nível de urgência', 'sem intervenção humana', 'com aprendizado contínuo']
+      }
+    },
+    {
+      /* 9º andar: a biblioteca. Cada sala é um assunto e guarda os livros desse
+         assunto; o conteúdo dos livros está em js/biblioteca.js.
+         "corLivro" pinta as capas dos livros de cada sala. */
+      n: 9, id: 'estudo', sigla: 'EST', cor: '#9348b1', qtd: 416,
+      nome: 'Estudo',
+      titulo: 'Estudo e Biblioteca',
+      missao: 'A biblioteca da torre: cada livro é um conteúdo diferente — dinheiro, empresa, vendas, marketing, sites e rotina — resumido pelos agentes para você estudar.',
+      icone: 'M12 6.5C9.8 4.9 7 4.5 4 5v13c3-.5 5.8-.1 8 1.5 2.2-1.6 5-2 8-1.5V5c-3-.5-5.8-.1-8 1.5zM12 6.5v13',
+      chaves: ['estudo', 'estudos', 'estudar', 'biblioteca', 'livro', 'livros', 'leitura', 'aprender', 'aula', 'aulas', 'curso', 'cursos'],
+      squads: [
+        { nome: 'Finanças Pessoais', peso: 1.0, corLivro: '#008300', cargos: ['Tutor de finanças', 'Planejador de orçamento'] },
+        { nome: 'Empreendedorismo', peso: 1.1, corLivro: '#c98500', cargos: ['Mentor de negócios', 'Analista de formalização'] },
+        { nome: 'Técnicas de Venda', peso: 1.0, corLivro: '#d95926', cargos: ['Instrutor de vendas', 'Treinador de negociação'] },
+        { nome: 'Marketing Digital', peso: 1.0, corLivro: '#199e70', cargos: ['Professor de marketing', 'Curador de campanhas'] },
+        { nome: 'Criação de Sites', peso: 1.1, corLivro: '#3987e5', cargos: ['Instrutor de web design', 'Revisor de projetos'] },
+        { nome: 'Rotina e Gestão', peso: 0.9, corLivro: '#9085e9', cargos: ['Mentor de produtividade', 'Bibliotecário'] }
+      ],
+      vocab: {
+        acoes: [
+          ['Resumo de', 'Leitura'], ['Fichamento de', 'Leitura'], ['Tradução de', 'Leitura'],
+          ['Aula sobre', 'Ensino'], ['Exercícios de', 'Ensino'], ['Simulado de', 'Ensino'],
+          ['Mapa mental de', 'Síntese'], ['Fichas de revisão de', 'Síntese'], ['Plano de estudo de', 'Síntese'],
+          ['Curadoria de', 'Acervo'], ['Catalogação de', 'Acervo'], ['Atualização de', 'Acervo']
+        ],
+        objetos: ['finanças pessoais', 'orçamento doméstico', 'abertura de empresa', 'precificação', 'técnicas de venda', 'negociação', 'marketing digital', 'tráfego pago', 'SEO', 'copywriting', 'design de sites', 'landing pages', 'atendimento ao cliente', 'produtividade'],
+        contextos: ['para iniciantes', 'em 10 minutos', 'com exemplos reais', 'com exercícios', 'em áudio', 'em vídeo curto', 'para revisar', 'passo a passo']
       }
     }
   ];

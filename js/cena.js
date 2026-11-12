@@ -1,9 +1,14 @@
 /* ============================================================================
    TORRE — cena 3D (Three.js)
    ----------------------------------------------------------------------------
-   Desenha a torre de 8 andares, os agentes (um boneco por agente, desenhados
-   em lote para ficar leve), o núcleo de dados que liga tudo ao Mega Brain e os
+   Desenha a torre, andar por andar: as salas de cada squad (paredes de vidro,
+   porta, telão e uma estação de trabalho por agente — mesa, computador e
+   cadeira —, além da área de convivência mobiliada sozinha), os agentes (um
+   boneco por agente, desenhados em lote para ficar leve), o núcleo de dados
+   que liga tudo ao Mega Brain, a estante de livros do andar de estudo e os
    pacotes de informação que viajam entre os andares.
+
+   Três níveis de zoom:  torre inteira → andar → sala (ou livro).
 
    Este arquivo só desenha. Quem decide o que acontece é js/sim.js; quem liga
    os dois é js/app.js.
@@ -16,13 +21,21 @@
      a interface continua funcionando, só sem a torre. */
   T.cenaVazia = function () {
     var f = function () {};
-    return { vazia: true, irPara: f, focarAgente: f, limparFoco: f, pacote: f, pulsoAgente: f, difundir: f, statusAgente: f, margemDireita: f, qualidade: f, reuniaoAtiva: f, orcamento: f, entrar: f, andarAtual: function () { return 0; } };
+    return {
+      vazia: true, irPara: f, irParaSala: f, focarAgente: f, focarLivro: f, limparFoco: f, pacote: f, pulsoAgente: f, difundir: f, statusAgente: f,
+      margemDireita: f, qualidade: f, reuniaoAtiva: f, orcamento: f, entrar: f, andarAtual: function () { return 0; }, salaAtual: function () { return -1; }
+    };
   };
 
   T.criarCena = function (L, canvas, cb) {
     cb = cb || {};
     var THREE = L.THREE, GEO = T.GEO, ANDARES = T.ANDARES, N = ANDARES.length;
     var R = GEO.RAIO, H = 3.2, LIFT = 13, BASE = 0.7, PISO = 0.22;
+    /* salas: raio da parede do átrio, altura das divisórias, largura da porta e altura do assento das cadeiras */
+    var R_SALA = GEO.R_SALA, ALT_PAREDE = 1.45, PORTA = 0.84, ASSENTO = 0.09;
+    function indiceDe(id, padrao) { for (var i = 0; i < N; i++) if (ANDARES[i].id === id) return i; return padrao; }
+    /* andares com papel especial, encontrados pelo id (a ordem dos andares pode mudar) */
+    var IB = indiceDe('cerebro', N - 1), IR = indiceDe('reunioes', -1), IF = indiceDe('financeiro', -1), IE = indiceDe('estudo', -1);
     var TOPO = BASE + N * H;
     var FUNDO = 0x05070d;
     var calmo = !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -57,10 +70,67 @@
     composer.addPass(new L.OutputPass());
     var modo = 'alta';
 
-    var dummy = new THREE.Object3D(), corTmp = new THREE.Color(), BRANCO = new THREE.Color(1, 1, 1);
+    var dummy = new THREE.Object3D(), d2 = new THREE.Object3D(), corTmp = new THREE.Color(), BRANCO = new THREE.Color(1, 1, 1);
     function hdr(hex, k) { return new THREE.Color(hex).multiplyScalar(k); }
     function texturaDe(c) { var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso; return t; }
     function aditivo(o) { o.transparent = true; o.depthWrite = false; o.blending = THREE.AdditiveBlending; return o; }
+
+    /* ==========================================================================
+       FERRAMENTAS DE MODELAGEM
+       "Malha" junta planos sem iluminação (vidros, frisos de luz, destaques).
+       caixa/cilindro/esfera criam peças iluminadas, com cor por vértice, que
+       depois são fundidas em uma malha só (móveis).
+       Convenção de ângulos em todo o arquivo: x = cos(ang)·raio, z = sin(ang)·raio.
+       ======================================================================== */
+    function Malha() { this.p = []; }
+    Malha.prototype.quad = function (a, b, c, d) {
+      this.p.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2]);
+    };
+    Malha.prototype.geo = function () {
+      var g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+      return g;
+    };
+    function pol(raio, ang, y) { return [Math.cos(ang) * raio, y, Math.sin(ang) * raio]; }
+    function paredeRadial(m, ang, r0, r1, y0, y1) { m.quad(pol(r0, ang, y0), pol(r1, ang, y0), pol(r1, ang, y1), pol(r0, ang, y1)); }
+    function paredeArco(m, raio, a0, a1, y0, y1) {
+      var n = Math.max(1, Math.ceil((a1 - a0) / 0.08));
+      for (var i = 0; i < n; i++) { var u0 = a0 + (a1 - a0) * i / n, u1 = a0 + (a1 - a0) * (i + 1) / n; m.quad(pol(raio, u0, y0), pol(raio, u1, y0), pol(raio, u1, y1), pol(raio, u0, y1)); }
+    }
+    function faixaChao(m, r0, r1, a0, a1, y) {
+      var n = Math.max(1, Math.ceil((a1 - a0) / 0.08));
+      for (var i = 0; i < n; i++) { var u0 = a0 + (a1 - a0) * i / n, u1 = a0 + (a1 - a0) * (i + 1) / n; m.quad(pol(r0, u0, y), pol(r1, u0, y), pol(r1, u1, y), pol(r0, u1, y)); }
+    }
+    /* frisos de luz: duas fitas cruzadas, para aparecerem de qualquer ângulo */
+    var FRISO = 0.018;
+    function frisoRadial(m, ang, r0, r1, y) {
+      var nx = -Math.sin(ang) * FRISO, nz = Math.cos(ang) * FRISO, a = pol(r0, ang, y), b = pol(r1, ang, y);
+      m.quad([a[0], y - FRISO, a[2]], [b[0], y - FRISO, b[2]], [b[0], y + FRISO, b[2]], [a[0], y + FRISO, a[2]]);
+      m.quad([a[0] - nx, y, a[2] - nz], [b[0] - nx, y, b[2] - nz], [b[0] + nx, y, b[2] + nz], [a[0] + nx, y, a[2] + nz]);
+    }
+    function frisoArco(m, raio, a0, a1, y) { paredeArco(m, raio, a0, a1, y - FRISO, y + FRISO); faixaChao(m, raio - FRISO, raio + FRISO, a0, a1, y); }
+    function frisoVertical(m, raio, ang, y0, y1) {
+      var p = pol(raio, ang, 0), tx = -Math.sin(ang) * FRISO, tz = Math.cos(ang) * FRISO, rx = Math.cos(ang) * FRISO, rz = Math.sin(ang) * FRISO;
+      m.quad([p[0] - tx, y0, p[2] - tz], [p[0] + tx, y0, p[2] + tz], [p[0] + tx, y1, p[2] + tz], [p[0] - tx, y1, p[2] - tz]);
+      m.quad([p[0] - rx, y0, p[2] - rz], [p[0] + rx, y0, p[2] + rz], [p[0] + rx, y1, p[2] + rz], [p[0] - rx, y1, p[2] - rz]);
+    }
+
+    function pronta(g, cor) {
+      g = g.toNonIndexed(); g.deleteAttribute('uv');
+      var n = g.attributes.position.count, c = new Float32Array(n * 3);
+      for (var i = 0; i < n; i++) { c[i * 3] = cor.r; c[i * 3 + 1] = cor.g; c[i * 3 + 2] = cor.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+      return g;
+    }
+    function caixa(lista, w, h, d, x, y, z, cor) { var g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); lista.push(pronta(g, cor)); }
+    function cilindro(lista, r1, r2, h, x, y, z, cor, seg) { var g = new THREE.CylinderGeometry(r1, r2, h, seg || 12); g.translate(x, y, z); lista.push(pronta(g, cor)); }
+    function esfera(lista, r, x, y, z, cor, ey) { var g = new THREE.SphereGeometry(r, 10, 7); if (ey) g.scale(1, ey, 1); g.translate(x, y, z); lista.push(pronta(g, cor)); }
+    /* Leva peças modeladas "de frente" (o +Z local aponta para a fachada) até o ponto (raio, ang) do andar. */
+    var mTmp = new THREE.Matrix4();
+    function colocar(destino, pecas, raio, ang) {
+      mTmp.makeRotationY(Math.PI / 2 - ang).setPosition(Math.cos(ang) * raio, PISO, Math.sin(ang) * raio);
+      for (var i = 0; i < pecas.length; i++) { pecas[i].applyMatrix4(mTmp); destino.push(pecas[i]); }
+    }
 
     /* ==========================================================================
        AMBIENTE: chão, cidade ao fundo, estrelas
@@ -157,23 +227,101 @@
     /* ==========================================================================
        TEXTURAS DESENHADAS (planta do andar, telas de vídeo, placas das redes)
        ======================================================================== */
+    /* planta do andar: o tapete de cada sala, as fileiras de mesas, o corredor com o nome e as paredes */
     function texturaPiso(def) {
       var c = document.createElement('canvas'); c.width = c.height = 1024;
-      var x = c.getContext('2d'), e = 512 / R, i;
+      var x = c.getContext('2d'), e = 512 / R, i, set = def.setores, meiaLarg = GEO.CORREDOR / 2, porta = PORTA / 2 / R_SALA;
+      var fileiras = Math.round((def.agentes.reduce(function (m, ag) { return Math.max(m, ag.raio); }, GEO.R0) - GEO.R0) / GEO.PASSO) + 1;
       x.translate(512, 512);
       x.strokeStyle = def.cor; x.fillStyle = def.cor;
-      x.lineWidth = 1.5; x.globalAlpha = 0.3;
-      for (i = 0; i < GEO.MAX_ANEIS; i++) { x.beginPath(); x.arc(0, 0, (GEO.R0 + i * GEO.PASSO - GEO.PASSO / 2) * e, 0, Math.PI * 2); x.stroke(); }
-      var set = T.setores(def.squads.map(function (s) { return s.peso; }));
-      x.font = '600 19px system-ui, "Segoe UI", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
       set.forEach(function (s, k) {
-        x.globalAlpha = 0.55; x.lineWidth = 2;
-        x.beginPath(); x.moveTo(Math.cos(s.ini) * 2.45 * e, Math.sin(s.ini) * 2.45 * e); x.lineTo(Math.cos(s.ini) * 9.86 * e, Math.sin(s.ini) * 9.86 * e); x.stroke();
-        x.save(); x.rotate((s.ini + s.fim) / 2); x.translate(9.45 * e, 0); x.rotate(Math.PI / 2);
-        x.globalAlpha = 0.9; x.fillText(def.squads[k].nome.toUpperCase(), 0, 0); x.restore();
+        x.globalAlpha = k % 2 ? 0.02 : 0.038;                                   /* tapete da sala */
+        x.beginPath(); x.arc(0, 0, 9.0 * e, s.ini, s.fim); x.arc(0, 0, R_SALA * e, s.fim, s.ini, true); x.closePath(); x.fill();
+        x.globalAlpha = 0.06;                                                   /* área de convivência, junto à fachada */
+        x.beginPath(); x.arc(0, 0, 9.93 * e, s.ini + 0.012, s.fim - 0.012); x.arc(0, 0, 9.0 * e, s.fim - 0.012, s.ini + 0.012, true); x.closePath(); x.fill();
+        x.lineWidth = 1.2; x.globalAlpha = 0.16;                                /* fileiras de mesas */
+        for (i = 0; i < fileiras; i++) {
+          var raio = GEO.R0 + i * GEO.PASSO - 0.27, vao = (meiaLarg + 0.04) / raio;
+          if (s.meio - vao > s.ini + GEO.FOLGA / 2) {
+            x.beginPath(); x.arc(0, 0, raio * e, s.ini + GEO.FOLGA / 2, s.meio - vao); x.stroke();
+            x.beginPath(); x.arc(0, 0, raio * e, s.meio + vao, s.fim - GEO.FOLGA / 2); x.stroke();
+          }
+        }
+        x.save(); x.rotate(s.meio);                                             /* corredor, com o nome da sala no chão */
+        x.globalAlpha = 0.05; x.fillRect(R_SALA * e, -meiaLarg * e, (9.0 - R_SALA) * e, meiaLarg * 2 * e);
+        x.globalAlpha = 0.72; x.font = '600 18px system-ui, "Segoe UI", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.translate(6.1 * e, 0);
+        if (Math.cos(s.meio) < 0) x.rotate(Math.PI);
+        x.fillText(def.squads[k].nome.toUpperCase(), 0, 1);
+        x.restore();
+        x.globalAlpha = 0.6; x.lineWidth = 2.5;                                 /* parede entre as salas */
+        x.beginPath(); x.moveTo(Math.cos(s.ini) * R_SALA * e, Math.sin(s.ini) * R_SALA * e); x.lineTo(Math.cos(s.ini) * 9.93 * e, Math.sin(s.ini) * 9.93 * e); x.stroke();
+        x.globalAlpha = 0.85; x.lineWidth = 3;                                  /* parede do átrio, com a porta no meio */
+        x.beginPath(); x.arc(0, 0, R_SALA * e, s.ini, s.meio - porta); x.stroke();
+        x.beginPath(); x.arc(0, 0, R_SALA * e, s.meio + porta, s.fim); x.stroke();
       });
-      x.globalAlpha = 0.8; x.lineWidth = 3; x.beginPath(); x.arc(0, 0, 2.3 * e, 0, Math.PI * 2); x.stroke();
-      x.globalAlpha = 0.5; x.lineWidth = 2; x.beginPath(); x.arc(0, 0, 9.9 * e, 0, Math.PI * 2); x.stroke();
+      x.globalAlpha = 0.5; x.lineWidth = 2; x.beginPath(); x.arc(0, 0, 9.93 * e, 0, Math.PI * 2); x.stroke();
+      return texturaDe(c);
+    }
+
+    /* o que aparece nos monitores das mesas (a cor do andar entra depois, por agente) */
+    function texturaMonitor() {
+      var c = document.createElement('canvas'); c.width = 64; c.height = 40;
+      var x = c.getContext('2d');
+      x.fillStyle = '#2b3038'; x.fillRect(0, 0, 64, 40);
+      x.fillStyle = '#ffffff'; x.fillRect(5, 5, 26, 4); x.fillRect(5, 13, 40, 2); x.fillRect(5, 18, 32, 2); x.fillRect(5, 23, 36, 2); x.fillRect(5, 30, 14, 5);
+      x.fillStyle = '#c9d2de'; x.fillRect(46, 12, 13, 13);
+      return texturaDe(c);
+    }
+
+    /* telões das salas de um andar, todos na mesma imagem (3 por linha) */
+    function texturaTeloes(def) {
+      var cols = 3, lin = Math.ceil(def.squads.length / cols), cw = 384, ch = 192;
+      var c = document.createElement('canvas'); c.width = cols * cw; c.height = lin * ch;
+      var x = c.getContext('2d');
+      def.squads.forEach(function (s, k) {
+        var ox = (k % cols) * cw, oy = Math.floor(k / cols) * ch, r = T.rng('telao:' + def.id + ':' + k), nome = s.nome.toUpperCase(), tam = 42, i;
+        var g = x.createLinearGradient(ox, oy, ox + cw, oy + ch); g.addColorStop(0, '#0b1020'); g.addColorStop(1, '#151d33');
+        x.fillStyle = g; x.fillRect(ox, oy, cw, ch);
+        x.strokeStyle = def.cor; x.lineWidth = 4; x.strokeRect(ox + 4, oy + 4, cw - 8, ch - 8);
+        x.fillStyle = def.cor; x.fillRect(ox + 20, oy + 22, 44, 5);
+        x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+        x.fillStyle = 'rgba(238,241,246,.66)'; x.font = '500 15px "JetBrains Mono", ui-monospace, Consolas, monospace';
+        x.fillText('SALA ' + def.n + '.' + (k + 1) + '  ·  ' + (s.qtd || 0) + ' AGENTES', ox + 20, oy + 54);
+        x.fillStyle = '#eef1f6';
+        do { tam -= 2; x.font = '700 ' + tam + 'px Sora, system-ui, "Segoe UI", sans-serif'; } while (x.measureText(nome).width > cw - 40 && tam > 16);
+        x.fillText(nome, ox + 20, oy + 102);
+        for (i = 0; i < 16; i++) {                                              /* barras decorativas: não representam dados */
+          var h = 10 + r() * 44;
+          x.globalAlpha = 0.3 + 0.7 * (i / 15); x.fillStyle = def.cor; x.fillRect(ox + 20 + i * 21.6, oy + ch - 20 - h, 14, h);
+        }
+        x.globalAlpha = 1;
+      });
+      return { tex: texturaDe(c), cols: cols, lin: lin };
+    }
+
+    /* capa de um livro da biblioteca */
+    function texturaCapa(b, corHex, nomeSala) {
+      var c = document.createElement('canvas'); c.width = 256; c.height = 352;
+      var x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 256, 352), linhas = [], atual = '';
+      g.addColorStop(0, corHex); g.addColorStop(1, '#0b1020');
+      x.fillStyle = '#0b1020'; x.fillRect(0, 0, 256, 352);
+      x.globalAlpha = 0.94; x.fillStyle = g; x.fillRect(0, 0, 256, 352); x.globalAlpha = 1;
+      x.fillStyle = 'rgba(5,7,13,.32)'; x.fillRect(0, 0, 18, 352);              /* lombada */
+      x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 2; x.strokeRect(30, 14, 212, 324);
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+      x.fillStyle = 'rgba(255,255,255,.85)'; x.font = '500 13px "JetBrains Mono", ui-monospace, Consolas, monospace';
+      x.fillText((b.tipo ? 'GUIA PRÁTICO' : nomeSala.toUpperCase()).slice(0, 23), 44, 46);
+      x.fillStyle = '#ffffff'; x.font = '700 29px Sora, system-ui, "Segoe UI", sans-serif';
+      b.titulo.split(' ').forEach(function (p) {
+        var t = atual ? atual + ' ' + p : p;
+        if (atual && x.measureText(t).width > 188) { linhas.push(atual); atual = p; } else atual = t;
+      });
+      if (atual) linhas.push(atual);
+      linhas.slice(0, 5).forEach(function (l, i) { x.fillText(l, 44, 98 + i * 35); });
+      x.fillStyle = 'rgba(255,255,255,.88)'; x.fillRect(44, 288, 40, 3);
+      x.font = '500 14px Sora, system-ui, "Segoe UI", sans-serif'; x.fillStyle = 'rgba(255,255,255,.85)';
+      x.fillText(b.min + ' min de leitura', 44, 318);
       return texturaDe(c);
     }
 
@@ -319,12 +467,12 @@
           for (var c = 0; c < alt; c++) { dummy.position.set(Math.cos(a) * 1.95, PISO + 0.05 + c * 0.1, Math.sin(a) * 1.95); dummy.scale.setScalar(1); dummy.updateMatrix(); moedas.setMatrixAt(k++, dummy.matrix); }
         }
         moedas.count = k;
-        var trilho = new THREE.Mesh(new THREE.TorusGeometry(2.62, 0.03, 6, 96), new THREE.MeshBasicMaterial({ color: hdr(cor.getHex(), 0.5) }));
+        var trilho = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.03, 6, 96), new THREE.MeshBasicMaterial({ color: hdr(cor.getHex(), 0.5) }));
         trilho.rotation.x = Math.PI / 2; trilho.position.y = PISO + 0.06; g.add(trilho);
         var matArco = new THREE.MeshBasicMaterial({ color: hdr(cor.getHex(), 2.6) }), arco = null;
         function definir(p) {
           if (arco) { g.remove(arco); arco.geometry.dispose(); }
-          arco = new THREE.Mesh(new THREE.TorusGeometry(2.62, 0.07, 8, 96, Math.PI * 2 * Math.max(0.01, Math.min(1, p))), matArco);
+          arco = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.07, 8, 96, Math.PI * 2 * Math.max(0.01, Math.min(1, p))), matArco);
           arco.rotation.x = Math.PI / 2; arco.position.y = PISO + 0.08; g.add(arco);
         }
         definir(0.33);
@@ -363,8 +511,6 @@
         for (var i = 0; i < 46; i++) { var a = ags[Math.floor(r() * ags.length)]; pts.push(0, 1.75, 0, a.x, PISO + 0.55, a.z); }
         var gs = new THREE.BufferGeometry(); gs.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
         var sinapses = new THREE.LineSegments(gs, new THREE.LineBasicMaterial(aditivo({ color: hdr(cor.getHex(), 1.6), opacity: 0.16 }))); g.add(sinapses);
-        var cupula = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.SphereGeometry(R, 22, 6, 0, Math.PI * 2, 0, Math.PI / 2)), new THREE.LineBasicMaterial(aditivo({ color: hdr(cor.getHex(), 1.3), opacity: 0.16 })));
-        cupula.scale.y = 0.42; cupula.position.y = H - 0.2; g.add(cupula);
         var pulso = 0;
         return {
           atualizar: function (t, dt) {
@@ -381,8 +527,132 @@
           },
           pulsar: function () { pulso = 1; }
         };
+      },
+
+      /* 9 · estante giratória da biblioteca: cada livro é um conteúdo e pode ser clicado */
+      estudo: function (g, cor, def) {
+        var acervo = T.BIBLIOTECA || [], n = acervo.length, emCima = Math.ceil(n / 2), livros = [];
+        var grupo = new THREE.Group(); g.add(grupo);
+        var geo = new THREE.BoxGeometry(0.62, 0.86, 0.11), matPagina = new THREE.MeshBasicMaterial({ color: 0xd3d9e4 });
+        acervo.forEach(function (b, i) {
+          var embaixo = i >= emCima, j = embaixo ? i - emCima : i, tot = embaixo ? n - emCima : emCima;
+          var a = (j + (embaixo ? 0.5 : 0)) / Math.max(1, tot) * Math.PI * 2, sq = def.squads[b.sala] || {}, corSala = sq.corLivro || def.cor;
+          var lombada = new THREE.MeshBasicMaterial({ color: new THREE.Color(corSala).multiplyScalar(0.5) });
+          var capa = new THREE.MeshBasicMaterial({ map: texturaCapa(b, corSala, sq.nome || def.nome) });
+          /* faces da caixa: +x páginas, -x lombada, cima, baixo, +z capa (virada para fora), -z contracapa */
+          var m = new THREE.Mesh(geo, [matPagina, lombada, matPagina, matPagina, capa, lombada]);
+          m.position.set(Math.cos(a) * 1.78, embaixo ? 1.0 : 2.02, Math.sin(a) * 1.78);
+          m.rotation.y = Math.PI / 2 - a;
+          m.userData.livro = i; m.userData.ang = a; m.userData.y = m.position.y;
+          grupo.add(m); livros.push(m);
+        });
+        var matAro = new THREE.MeshBasicMaterial({ color: hdr(cor.getHex(), 1.9) }), geoAroE = new THREE.TorusGeometry(1.78, 0.022, 6, 80);
+        [0.5, 1.51, 2.52].forEach(function (y) { var aro = new THREE.Mesh(geoAroE, matAro); aro.rotation.x = Math.PI / 2; aro.position.y = y; g.add(aro); });
+        var giro = 0, foco = -1, sobre = -1, escala = livros.map(function () { return 1; });
+        return {
+          livros: livros,
+          atualizar: function (t, dt) {
+            if (foco < 0 && !calmo) giro += dt * 0.1;
+            grupo.rotation.y = -giro;
+            for (var i = 0; i < livros.length; i++) {
+              var alvo = i === foco ? 1.2 : i === sobre ? 1.1 : 1;
+              escala[i] += (alvo - escala[i]) * Math.min(1, dt * 8);
+              livros[i].scale.setScalar(escala[i]);
+              livros[i].position.y = livros[i].userData.y + (foco < 0 && !calmo ? Math.sin(t * 0.9 + i * 1.7) * 0.03 : 0);
+            }
+          },
+          focar: function (i) { foco = i; },
+          soltar: function () { foco = -1; },
+          apontar: function (i) { sobre = i; },
+          angulo: function (i) { return livros[i].userData.ang + giro; },   /* onde o livro i está agora, no mundo */
+          altura: function (i) { return livros[i].userData.y; }
+        };
       }
     };
+
+    /* ==========================================================================
+       MÓVEIS
+       Estação de trabalho (uma por agente): mesa, monitor, teclado e cadeira em
+       uma peça só; a tela acesa é uma segunda malha, para poder mudar de brilho
+       conforme o estado do agente. Modelada com o agente na origem, olhando
+       para o centro do andar (-Z); a cadeira fica atrás dele (+Z).
+       ======================================================================== */
+    var geoEstacao = (function () {
+      /* cores claras/escuras em tons de cinza: a cor do andar entra depois, pelo material de cada andar */
+      var l = [], tampo = new THREE.Color(0.4, 0.42, 0.5), perna = new THREE.Color(0.2, 0.22, 0.28), preto = new THREE.Color(0.05, 0.055, 0.075), estofado = new THREE.Color(0.95, 0.95, 0.95);
+      caixa(l, 0.42, 0.025, 0.24, 0, 0.25, -0.27, tampo);
+      caixa(l, 0.02, 0.24, 0.2, -0.2, 0.12, -0.27, perna); caixa(l, 0.02, 0.24, 0.2, 0.2, 0.12, -0.27, perna);
+      caixa(l, 0.27, 0.17, 0.016, 0, 0.4, -0.345, preto);                       /* monitor */
+      caixa(l, 0.03, 0.07, 0.02, 0, 0.295, -0.352, preto); caixa(l, 0.11, 0.01, 0.07, 0, 0.267, -0.345, preto);
+      caixa(l, 0.17, 0.008, 0.055, 0, 0.267, -0.215, preto);                    /* teclado */
+      caixa(l, 0.27, 0.03, 0.26, 0, ASSENTO, 0.01, estofado); caixa(l, 0.25, 0.21, 0.025, 0, ASSENTO + 0.19, 0.145, estofado);   /* cadeira */
+      caixa(l, 0.03, ASSENTO, 0.03, 0, ASSENTO / 2, 0.01, perna);
+      return L.mergeGeometries(l);
+    })();
+    var geoTela = new THREE.PlaneGeometry(0.25, 0.15); geoTela.translate(0, 0.4, -0.3365);
+    var matMoveis = new THREE.MeshLambertMaterial({ vertexColors: true });
+    var matTela = new THREE.MeshBasicMaterial({ map: texturaMonitor() });
+
+    /* Móveis da área de convivência. Cada função recebe a lista de peças, a cor
+       do andar e um sorteador; quem escolhe o que vai em cada sala é T.mobiliar(). */
+    var CINZA = new THREE.Color(0x232b45), ESCURO = new THREE.Color(0x121727), CLARO = new THREE.Color(0x7d889c), VERDE = new THREE.Color(0x24804a), AGUA = new THREE.Color(0x3f8fc9);
+    var CORES_LIVROS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9', '#e66767', '#b9c4d8'].map(function (h) { return new THREE.Color(h).multiplyScalar(0.62); });
+    var MOBILIA = {
+      planta: function (l, cor, r) {
+        var h = 0.3 + r() * 0.16;
+        cilindro(l, 0.11, 0.085, 0.17, 0, 0.085, 0, CINZA, 10);
+        cilindro(l, 0.015, 0.015, h, 0, 0.17 + h / 2, 0, VERDE.clone().multiplyScalar(0.5), 5);
+        esfera(l, 0.17, 0, 0.17 + h, 0, VERDE, 1.25); esfera(l, 0.12, 0.07, 0.12 + h * 0.75, 0.04, VERDE.clone().multiplyScalar(0.78), 1.1);
+      },
+      sofa: function (l, cor) {
+        var c1 = cor.clone().multiplyScalar(0.62), c2 = cor.clone().multiplyScalar(0.42);
+        caixa(l, 0.92, 0.13, 0.36, 0, 0.115, -0.04, c1); caixa(l, 0.92, 0.27, 0.09, 0, 0.245, 0.17, c2);
+        caixa(l, 0.09, 0.21, 0.4, -0.46, 0.155, -0.02, c2); caixa(l, 0.09, 0.21, 0.4, 0.46, 0.155, -0.02, c2);
+        cilindro(l, 0.13, 0.13, 0.025, 0, 0.15, -0.36, CLARO, 14); cilindro(l, 0.025, 0.045, 0.14, 0, 0.07, -0.36, CINZA, 8);   /* mesinha de centro */
+      },
+      mesa: function (l, cor) {
+        var c1 = cor.clone().multiplyScalar(0.6);
+        cilindro(l, 0.3, 0.3, 0.03, 0, 0.255, 0.02, CLARO, 20); cilindro(l, 0.045, 0.09, 0.24, 0, 0.12, 0.02, CINZA, 10);
+        for (var i = 0; i < 4; i++) { var a = i / 4 * Math.PI * 2 + 0.785; cilindro(l, 0.085, 0.085, 0.15, Math.cos(a) * 0.42, 0.075, 0.02 + Math.sin(a) * 0.42, c1, 10); }
+      },
+      armario: function (l, cor) {
+        caixa(l, 0.86, 0.62, 0.24, 0, 0.31, 0.2, CINZA); caixa(l, 0.88, 0.02, 0.26, 0, 0.63, 0.2, CLARO);
+        caixa(l, 0.4, 0.5, 0.012, -0.215, 0.31, 0.074, ESCURO); caixa(l, 0.4, 0.5, 0.012, 0.215, 0.31, 0.074, ESCURO);
+        caixa(l, 0.015, 0.12, 0.02, -0.03, 0.34, 0.064, cor); caixa(l, 0.015, 0.12, 0.02, 0.03, 0.34, 0.064, cor);
+      },
+      bebedouro: function (l) {
+        caixa(l, 0.17, 0.42, 0.17, 0, 0.21, 0.18, CLARO);
+        cilindro(l, 0.07, 0.07, 0.17, 0, 0.505, 0.18, AGUA, 10); cilindro(l, 0.04, 0.07, 0.03, 0, 0.605, 0.18, AGUA, 10);
+      },
+      quadro: function (l, cor) {
+        caixa(l, 0.82, 0.46, 0.025, 0, 0.52, 0.22, CLARO);
+        caixa(l, 0.86, 0.03, 0.035, 0, 0.765, 0.22, CINZA); caixa(l, 0.86, 0.03, 0.035, 0, 0.275, 0.22, CINZA);
+        caixa(l, 0.03, 0.78, 0.03, -0.4, 0.39, 0.22, CINZA); caixa(l, 0.03, 0.78, 0.03, 0.4, 0.39, 0.22, CINZA);
+        caixa(l, 0.3, 0.02, 0.006, -0.18, 0.6, 0.204, cor); caixa(l, 0.42, 0.02, 0.006, -0.12, 0.54, 0.204, ESCURO); caixa(l, 0.22, 0.02, 0.006, -0.22, 0.48, 0.204, ESCURO);
+      },
+      estante: function (l, cor, r) {
+        caixa(l, 0.94, 0.9, 0.04, 0, 0.45, 0.31, ESCURO);
+        caixa(l, 0.04, 0.9, 0.24, -0.47, 0.45, 0.2, CINZA); caixa(l, 0.04, 0.9, 0.24, 0.47, 0.45, 0.2, CINZA);
+        for (var p = 0; p < 4; p++) caixa(l, 0.94, 0.03, 0.24, 0, 0.015 + p * 0.29, 0.2, CINZA);
+        for (p = 0; p < 3; p++) {
+          var x = -0.43;
+          while (x < 0.39) {
+            var w = 0.035 + r() * 0.035, h = 0.17 + r() * 0.08;
+            if (r() < 0.86) caixa(l, w, h, 0.17, x + w / 2, 0.03 + p * 0.29 + h / 2, 0.19, CORES_LIVROS[Math.floor(r() * CORES_LIVROS.length)]);
+            x += w + 0.006;
+          }
+        }
+      },
+      leitura: function (l, cor) {
+        var c1 = cor.clone().multiplyScalar(0.6);
+        caixa(l, 1.0, 0.03, 0.44, 0, 0.26, 0.02, CLARO);
+        caixa(l, 0.04, 0.25, 0.4, -0.46, 0.125, 0.02, CINZA); caixa(l, 0.04, 0.25, 0.4, 0.46, 0.125, 0.02, CINZA);
+        caixa(l, 0.2, 0.012, 0.15, -0.22, 0.282, 0.0, cor); caixa(l, 0.2, 0.012, 0.15, 0.2, 0.282, 0.06, CORES_LIVROS[1]);       /* livros abertos */
+        cilindro(l, 0.02, 0.045, 0.16, 0, 0.355, 0.16, CINZA, 8); esfera(l, 0.05, 0, 0.45, 0.16, new THREE.Color(0xd9c98a));    /* luminária */
+        cilindro(l, 0.085, 0.085, 0.15, -0.28, 0.075, -0.32, c1, 10); cilindro(l, 0.085, 0.085, 0.15, 0.28, 0.075, -0.32, c1, 10);
+      }
+    };
+    var matMobilia = new THREE.MeshLambertMaterial({ vertexColors: true });
 
     /* ==========================================================================
        OS ANDARES
@@ -399,7 +669,16 @@
     var corpo = new THREE.CylinderGeometry(0.085, 0.125, 0.32, 6); corpo.translate(0, 0.16, 0);
     var cabeca = new THREE.SphereGeometry(0.098, 8, 6); cabeca.translate(0, 0.43, 0);
     var geoAgente = L.mergeGeometries([corpo, cabeca]);
-    var matAgente = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    /* sombreado fixo, gravado no boneco: dá volume de perto sem custar nada (os bonecos não usam as luzes da cena) */
+    (function () {
+      var nrm = geoAgente.attributes.normal, n = nrm.count, c = new Float32Array(n * 3), lx = 0.33, ly = 0.8, lz = 0.5;
+      for (var i = 0; i < n; i++) {
+        var f = 0.62 + 0.38 * Math.max(0, Math.min(1, (nrm.getX(i) * lx + nrm.getY(i) * ly + nrm.getZ(i) * lz) * 0.6 + 0.5));
+        c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = f;
+      }
+      geoAgente.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    })();
+    var matAgente = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true });
     var toques = [];
 
     var andares = ANDARES.map(function (def, i) {
@@ -409,7 +688,7 @@
       var laje = new THREE.Mesh(geoLaje, matLaje); laje.position.y = PISO / 2; g.add(laje);
       var matAro = new THREE.MeshBasicMaterial({ color: cor.clone().multiplyScalar(1.7) });
       var aro = new THREE.Mesh(geoAro, matAro); aro.rotation.x = Math.PI / 2; aro.position.y = PISO; g.add(aro);
-      var aro2 = new THREE.Mesh(geoAroFino, matAro); aro2.rotation.x = Math.PI / 2; aro2.position.y = H - 0.1; g.add(aro2);
+      var aroTopo = new THREE.Mesh(geoAroFino, matAro); aroTopo.rotation.x = Math.PI / 2; aroTopo.position.y = H - 0.1; g.add(aroTopo);
 
       var planta = new THREE.Mesh(geoPlanta, new THREE.MeshBasicMaterial(aditivo({ map: texturaPiso(def), opacity: 0.95 })));
       planta.rotation.x = -Math.PI / 2; planta.position.y = PISO + 0.012; g.add(planta);
@@ -421,6 +700,55 @@
       for (var k = 0; k < 8; k++) { var a = (k + 0.5) / 8 * Math.PI * 2; dummy.position.set(Math.cos(a) * R, PISO + (H - 0.32) / 2, Math.sin(a) * R); dummy.scale.setScalar(1); dummy.updateMatrix(); colunas.setMatrixAt(k, dummy.matrix); }
       g.add(colunas);
 
+      /* ---------- salas: uma por squad, com divisórias de vidro, porta e telão ---------- */
+      var set = def.setores, vidros = new Malha(), frisos = new Malha(), yP = PISO + ALT_PAREDE, vaoPorta = PORTA / 2 / R_SALA;
+      set.forEach(function (s) {
+        paredeRadial(vidros, s.ini, R_SALA, R, PISO, yP); frisoRadial(frisos, s.ini, R_SALA, R, yP);
+        paredeArco(vidros, R_SALA, s.ini, s.meio - vaoPorta, PISO, yP); frisoArco(frisos, R_SALA, s.ini, s.meio - vaoPorta, yP);
+        paredeArco(vidros, R_SALA, s.meio + vaoPorta, s.fim, PISO, yP); frisoArco(frisos, R_SALA, s.meio + vaoPorta, s.fim, yP);
+        frisoVertical(frisos, R_SALA, s.meio - vaoPorta, PISO, yP + 0.3); frisoVertical(frisos, R_SALA, s.meio + vaoPorta, PISO, yP + 0.3);   /* batentes da porta */
+        frisoArco(frisos, R_SALA, s.meio - vaoPorta, s.meio + vaoPorta, yP + 0.3);
+      });
+      g.add(new THREE.Mesh(vidros.geo(), new THREE.MeshBasicMaterial(aditivo({ color: cor, side: THREE.DoubleSide, opacity: 0.07 }))));
+      g.add(new THREE.Mesh(frisos.geo(), new THREE.MeshBasicMaterial({ color: cor.clone().multiplyScalar(0.95), side: THREE.DoubleSide })));
+
+      /* telão de cada sala, acima da porta, virado para dentro da sala */
+      var tl = texturaTeloes(def), pt = [], uv = [];
+      set.forEach(function (s, k) {
+        var meia = Math.min(0.85, (s.fim - s.ini) * R_SALA / 2 - 0.22), y0 = yP + 0.42, y1 = y0 + meia, rc = R_SALA + 0.05;
+        var cx = Math.cos(s.meio) * rc, cz = Math.sin(s.meio) * rc, tx = -Math.sin(s.meio) * meia, tz = Math.cos(s.meio) * meia;
+        var u0 = (k % tl.cols) / tl.cols, u1 = u0 + 1 / tl.cols, v1 = 1 - Math.floor(k / tl.cols) / tl.lin, v0 = v1 - 1 / tl.lin;
+        pt.push(cx + tx, y0, cz + tz, cx - tx, y0, cz - tz, cx - tx, y1, cz - tz, cx + tx, y0, cz + tz, cx - tx, y1, cz - tz, cx + tx, y1, cz + tz);
+        uv.push(u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1);
+      });
+      var geoTeloes = new THREE.BufferGeometry();
+      geoTeloes.setAttribute('position', new THREE.Float32BufferAttribute(pt, 3)); geoTeloes.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      /* os telões só aparecem com uma sala aberta: no andar visto de cima, tapariam a peça central (e os livros) */
+      var teloes = new THREE.Mesh(geoTeloes, new THREE.MeshBasicMaterial({ map: tl.tex }));
+      teloes.visible = false; g.add(teloes);
+
+      /* uma estação de trabalho por agente: a mesa fica entre ele e o centro do andar */
+      var nAg = def.agentes.length, matEst = matMoveis.clone(); matEst.color.copy(cor).lerp(BRANCO, 0.15).multiplyScalar(0.6);
+      var estacoes = new THREE.InstancedMesh(geoEstacao, matEst, nAg), telas = new THREE.InstancedMesh(geoTela, matTela, nAg);
+      def.agentes.forEach(function (ag, j) {
+        d2.position.set(ag.x, PISO, ag.z); d2.rotation.set(0, Math.PI / 2 - ag.ang, 0); d2.updateMatrix();
+        estacoes.setMatrixAt(j, d2.matrix); telas.setMatrixAt(j, d2.matrix);
+      });
+      estacoes.computeBoundingSphere(); telas.computeBoundingSphere();
+      estacoes.visible = false; g.add(estacoes); g.add(telas);
+
+      /* área de convivência de cada sala: mobília sorteada por T.mobiliar() */
+      var pecas = [];
+      set.forEach(function (s, k) {
+        T.mobiliar(def, k).forEach(function (m) {
+          var l = [];
+          (MOBILIA[m.tipo] || MOBILIA.planta)(l, cor, T.rng('movel:' + def.id + ':' + k + ':' + m.ang.toFixed(3)));
+          colocar(pecas, l, m.raio, m.ang);
+        });
+      });
+      var mobilia = new THREE.Mesh(pecas.length ? L.mergeGeometries(pecas) : new THREE.BufferGeometry(), matMobilia);
+      mobilia.visible = false; g.add(mobilia);
+
       var mesh = new THREE.InstancedMesh(geoAgente, matAgente, def.agentes.length);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       g.add(mesh);
@@ -428,17 +756,27 @@
       var toque = new THREE.Mesh(geoToque, matToque); toque.position.y = H / 2; toque.userData.andar = i; g.add(toque); toques.push(toque);
 
       var o = {
-        def: def, g: g, cor: cor, matAro: matAro, matVidro: matVidro, agentes: mesh,
+        def: def, g: g, cor: cor, matAro: matAro, matVidro: matVidro, aroTopo: aroTopo, agentes: mesh, estacoes: estacoes, telas: telas, mobilia: mobilia, teloes: teloes,
         escala: new Float32Array(def.agentes.length).fill(1),
         moveis: def.agentes.filter(function (ag) { return ag.movel; }).map(function (ag) { return ag.i; }),
+        /* até onde quem circula pode ir sem atravessar as paredes da própria sala */
+        vai: def.agentes.map(function (ag) { var s = set[ag.squad]; return Math.max(0.02, Math.min(0.3, ag.ang - s.ini - 0.07, s.fim - ag.ang - 0.07)); }),
         brilho: 0, flash: 0, peca: null
       };
       o.peca = PECAS[def.id] ? PECAS[def.id](g, cor, def) : null;
       return o;
     });
 
+    /* cúpula de luz sobre o último andar */
+    (function () {
+      var topo = andares[N - 1];
+      var cupula = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.SphereGeometry(R, 22, 6, 0, Math.PI * 2, 0, Math.PI / 2)), new THREE.LineBasicMaterial(aditivo({ color: hdr(topo.cor.getHex(), 1.3), opacity: 0.16 })));
+      cupula.scale.y = 0.42; cupula.position.y = H - 0.2; topo.g.add(cupula);
+    })();
+
     /* ---------- agentes: posição, cor, estado ---------- */
-    var FATOR = { trabalhando: 1.05, reuniao: 1.1, ocioso: 0.42, pausa: 0.2 };
+    var FATOR = { trabalhando: 1.22, reuniao: 1.28, ocioso: 0.5, pausa: 0.24 };          /* já compensa o sombreado gravado no boneco */
+    var BRILHO_TELA = { trabalhando: 1.0, reuniao: 0.3, ocioso: 0.4, pausa: 0.1 };      /* o monitor acompanha o estado do agente */
     var destaque = null;   /* agente sob o ponteiro: { a, i } */
     var escolhido = null;  /* agente selecionado: { a, i } */
 
@@ -449,21 +787,47 @@
       if ((destaque && destaque.a === a && destaque.i === i) || (escolhido && escolhido.a === a && escolhido.i === i)) alvo.set(2.2, 2.2, 2.2);
       return alvo;
     }
-    function pintar(a, i) { a.agentes.setColorAt(i, corAgente(a, i, corTmp)); a.agentes.instanceColor.needsUpdate = true; }
+    function corTela(a, i, alvo) {
+      var ag = a.def.agentes[i];
+      return alvo.copy(a.cor).multiplyScalar(ag.movel && !calmo ? 0.12 : (BRILHO_TELA[ag.status] || 0.5));
+    }
+    function pintar(a, i) {
+      a.agentes.setColorAt(i, corAgente(a, i, corTmp)); a.agentes.instanceColor.needsUpdate = true;
+      a.telas.setColorAt(i, corTela(a, i, corTmp)); a.telas.instanceColor.needsUpdate = true;
+    }
     function posicionar(a, i, t) {
-      var ag = a.def.agentes[i], x = ag.x, z = ag.z;
+      var ag = a.def.agentes[i], x = ag.x, z = ag.z, y = PISO + ASSENTO;   /* sentado na cadeira */
       if (ag.movel && !calmo) {
-        var ang = ag.ang + Math.sin(t * 0.32 + ag.fase) * 0.34, raio = ag.raio + GEO.PASSO / 2;
-        x = Math.cos(ang) * raio; z = Math.sin(ang) * raio;
+        /* quem circula caminha pelo vão atrás da própria fileira, sem sair da sala */
+        var ang = ag.ang + Math.sin(t * 0.32 + ag.fase) * a.vai[i], raio = ag.raio + 0.22;
+        x = Math.cos(ang) * raio; z = Math.sin(ang) * raio; y = PISO;
       }
-      dummy.position.set(x, PISO, z); dummy.scale.setScalar(a.escala[i]); dummy.updateMatrix();
+      dummy.position.set(x, y, z); dummy.scale.setScalar(a.escala[i]); dummy.updateMatrix();
       a.agentes.setMatrixAt(i, dummy.matrix);
     }
     andares.forEach(function (a) {
-      for (var i = 0; i < a.def.agentes.length; i++) { posicionar(a, i, 0); a.agentes.setColorAt(i, corAgente(a, i, corTmp)); }
-      a.agentes.instanceMatrix.needsUpdate = true; a.agentes.instanceColor.needsUpdate = true;
+      for (var i = 0; i < a.def.agentes.length; i++) { posicionar(a, i, 0); a.agentes.setColorAt(i, corAgente(a, i, corTmp)); a.telas.setColorAt(i, corTela(a, i, corTmp)); }
+      a.agentes.instanceMatrix.needsUpdate = true; a.agentes.instanceColor.needsUpdate = true; a.telas.instanceColor.needsUpdate = true;
       a.agentes.computeBoundingSphere();
     });
+
+    /* destaque de sala: uma mancha de luz no chão da sala sob o ponteiro e outra na sala aberta */
+    function luzDeSala(opacidade) {
+      var m = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial(aditivo({ color: 0xffffff, side: THREE.DoubleSide, opacity: opacidade })));
+      m.visible = false; m.userData.a = null; m.userData.k = -1;
+      return m;
+    }
+    var luzSobre = luzDeSala(0.12), luzAberta = luzDeSala(0.07);
+    function acender(luz, a, k) {
+      if (!a || k < 0 || !a.def.setores[k]) { luz.visible = false; return; }
+      if (luz.userData.a !== a || luz.userData.k !== k) {
+        var s = a.def.setores[k], m = new Malha();
+        faixaChao(m, R_SALA, R, s.ini, s.fim, PISO + 0.02);
+        luz.geometry.dispose(); luz.geometry = m.geo();
+        luz.material.color.copy(a.cor); luz.userData.a = a; luz.userData.k = k; a.g.add(luz);
+      }
+      luz.visible = true;
+    }
 
     var pulsos = [];
     function pulsoAgente(n, i) {
@@ -501,7 +865,7 @@
       if (pacotes.length >= MAXP || !andares[o.de - 1] || !andares[o.para - 1]) return;
       var a = o.doCentro ? { x: 0, z: 0 } : (lugar(o.de, o.agDe) || { x: 0, z: 0 }), b = lugar(o.para, o.agPara) || { x: 0, z: 0 };
       pacotes.push({
-        de: o.de - 1, para: o.para - 1, via: !!o.via && o.de !== N && o.para !== N && o.de !== o.para,
+        de: o.de - 1, para: o.para - 1, via: !!o.via && o.de !== IB + 1 && o.para !== IB + 1 && o.de !== o.para,
         ax: a.x, az: a.z, bx: b.x, bz: b.z, agPara: o.agPara, t: 0, suave: !!o.suave, doCentro: !!o.doCentro,
         cor: andares[o.de - 1].cor.clone().multiplyScalar(o.suave ? 1.2 : 2.6), tam: o.destaque ? 1.9 : o.suave ? 0.6 : 1
       });
@@ -514,7 +878,7 @@
         DUR[0] = DUR[1] = 0.32; return 3;
       }
       if (!p.doCentro) { P[++k].set(0, ya + 1.5, 0); DUR[k - 1] = 0.4; } else P[0].set(0, ya + 1.75, 0);
-      if (p.via) { var yc = andares[N - 1].g.position.y + 1.75; P[++k].set(0, yc, 0); DUR[k - 1] = Math.max(0.2, Math.abs(yc - P[k - 1].y) / 58); }
+      if (p.via) { var yc = andares[IB].g.position.y + 1.75; P[++k].set(0, yc, 0); DUR[k - 1] = Math.max(0.2, Math.abs(yc - P[k - 1].y) / 58); }
       P[++k].set(0, yb + 1.5, 0); DUR[k - 1] = Math.max(0.2, Math.abs(P[k].y - P[k - 1].y) / 58);
       P[++k].set(p.bx, yb + 0.8, p.bz); DUR[k - 1] = 0.4;
       return k + 1;
@@ -548,16 +912,16 @@
       if (meshPac.instanceColor) meshPac.instanceColor.needsUpdate = true;
     }
     function difundir() {
-      var c = andares[N - 1];
+      var c = andares[IB];
       if (c.peca && c.peca.pulsar) c.peca.pulsar();
-      for (var i = 1; i < N; i++) pacote({ de: N, para: i, doCentro: true, agPara: Math.floor(Math.random() * ANDARES[i - 1].agentes.length) });
+      for (var i = 1; i <= N; i++) if (i !== IB + 1) pacote({ de: IB + 1, para: i, doCentro: true, agPara: Math.floor(Math.random() * ANDARES[i - 1].agentes.length) });
       c.flash = 1.2;
     }
 
     /* ==========================================================================
        CÂMERA
        ======================================================================== */
-    var larg = 1, alt = 1, sel = -1, voo = null, margemAlvo = 0, margem = 0;
+    var larg = 1, alt = 1, sel = -1, sala = -1, livroFoco = -1, voo = null, margemAlvo = 0, margem = 0;
     var alvoGeral = new THREE.Vector3(0, TOPO * 0.5 + 0.5, 0);
 
     function destino(alvo, dist, elev) {
@@ -573,33 +937,80 @@
       var asp = Math.max(0.3, (larg - margemAlvo) / alt);
       return Math.max(8.6 / tg(), (R + 1.4) / (tg() * asp));
     }
-    function voar(pos, alvo, dur) {
-      voo = { p0: camera.position.clone(), a0: controls.target.clone(), p1: pos, a1: alvo, t: 0, dur: calmo ? 0.01 : dur };
+    /* emArco: contorna a torre (interpola ângulo, raio e altura) em vez de atravessá-la em linha reta */
+    function voar(pos, alvo, dur, emArco) {
+      voo = { p0: camera.position.clone(), a0: controls.target.clone(), p1: pos, a1: alvo, t: 0, dur: calmo ? 0.01 : dur, arco: null };
+      if (emArco) {
+        var r0 = Math.hypot(voo.p0.x, voo.p0.z), r1 = Math.hypot(pos.x, pos.z), g0 = Math.atan2(voo.p0.z, voo.p0.x), dg = Math.atan2(pos.z, pos.x) - g0;
+        while (dg > Math.PI) dg -= Math.PI * 2;
+        while (dg < -Math.PI) dg += Math.PI * 2;
+        if (r0 > 0.5 && r1 > 0.5) voo.arco = { r0: r0, r1: r1, g0: g0, dg: dg };
+      }
       controls.enabled = false;
+    }
+    /* marca qual andar está aberto (sem mexer na câmera) */
+    function escolherAndar(i) {
+      sel = i;
+      if (elRotulos) elRotulos.classList.toggle('oculto', i >= 0);
+      rotularSalas(i);
+      controls.minDistance = i < 0 ? 6 : 2.5;
     }
     function irPara(n, o) {
       n = Math.max(0, Math.min(N, n | 0));
       limparFoco();
-      sel = n - 1;
+      escolherAndar(n - 1);
+      sala = -1; acender(luzAberta, null, -1);
       var alvo = n === 0 ? alvoGeral.clone() : new THREE.Vector3(0, BASE + (n - 1) * H + 0.9, 0);
       voar(destino(alvo, n === 0 ? distGeral() : distAndar(), n === 0 ? 0.2 : 0.66), alvo, o && o.rapido ? 0.01 : 1.5);
-      controls.autoRotateSpeed = n === 0 ? 0.35 : 0.1;
-      if (elRotulos) elRotulos.classList.toggle('oculto', n !== 0);
+      controls.autoRotate = !calmo; controls.autoRotateSpeed = n === 0 ? 0.35 : 0.1;
+    }
+    /* zoom em uma sala: a câmera vai para junto da fachada e olha para dentro, na direção da porta */
+    function irParaSala(n, k, o) {
+      var a = andares[n - 1];
+      if (!a || !a.def.setores[k]) return;
+      limparFoco();
+      escolherAndar(n - 1);
+      sala = k; acender(luzAberta, a, k);
+      var s = a.def.setores[k], y = BASE + (n - 1) * H, estreita = (larg - margemAlvo) / alt < 0.9;
+      var longe = estreita ? 17.5 : 14.4, alto = estreita ? 8 : 5;
+      var alvo = new THREE.Vector3(Math.cos(s.meio) * 4.8, y + 0.8, Math.sin(s.meio) * 4.8);
+      voar(new THREE.Vector3(Math.cos(s.meio) * longe, y + alto, Math.sin(s.meio) * longe), alvo, o && o.rapido ? 0.01 : 1.5, true);
+      controls.autoRotate = false;
     }
     function focarAgente(n, i) {
       var a = andares[n - 1];
       if (!a || !a.def.agentes[i]) return;
-      if (sel !== n - 1) { sel = n - 1; if (elRotulos) elRotulos.classList.add('oculto'); }
+      if (sel !== n - 1) { escolherAndar(n - 1); sala = -1; acender(luzAberta, null, -1); }
+      soltarLivro();
       var antigo = escolhido, ag = a.def.agentes[i];
       escolhido = { a: a, i: i };
       if (antigo) pintar(antigo.a, antigo.i);
       pintar(a, i);
       a.g.add(marcador); marcador.position.set(ag.x, PISO, ag.z); marcador.visible = true;
-      var alvo = new THREE.Vector3(ag.x, BASE + (n - 1) * H + 0.6, ag.z);
-      voar(destino(alvo, 13, 0.62), alvo, 1.1);
-      controls.autoRotateSpeed = 0.1;
+      var alvo = new THREE.Vector3(ag.x, BASE + (n - 1) * H + 0.5, ag.z);
+      voar(destino(alvo, 7.5, 0.55), alvo, 1.1);
+      controls.autoRotate = !calmo; controls.autoRotateSpeed = 0.1;
+    }
+    /* aproxima a câmera de um livro da estante do andar de estudo (a estante para de girar) */
+    function focarLivro(i) {
+      var a = IE >= 0 ? andares[IE] : null, p = a && a.peca;
+      if (!p || !p.livros || !p.livros[i]) return;
+      limparFoco();
+      escolherAndar(IE);
+      sala = -1; acender(luzAberta, null, -1);
+      p.focar(i); livroFoco = i;
+      var ang = p.angulo(i), y = BASE + IE * H + p.altura(i), longe = (larg - margemAlvo) / alt < 0.9 ? 9 : 6.4;
+      var alvo = new THREE.Vector3(Math.cos(ang) * 1.6, y, Math.sin(ang) * 1.6);
+      voar(new THREE.Vector3(Math.cos(ang) * longe, y + 0.5, Math.sin(ang) * longe), alvo, 1.3, true);
+      controls.autoRotate = false;
+    }
+    function soltarLivro() {
+      if (livroFoco < 0) return;
+      livroFoco = -1;
+      if (IE >= 0 && andares[IE].peca && andares[IE].peca.soltar) andares[IE].peca.soltar();
     }
     function limparFoco() {
+      soltarLivro();
       if (!escolhido) return;
       var e = escolhido; escolhido = null; pintar(e.a, e.i); marcador.visible = false;
     }
@@ -636,29 +1047,94 @@
     }
 
     /* ==========================================================================
+       RÓTULOS DAS SALAS (aparecem quando um andar está aberto; clicar entra na sala)
+       ======================================================================== */
+    var elSalas = null, rotSalas = [], andarRotulado = -1, salaRotulo = -1, salaSob = -1, livroSob = -1;
+    if (elRotulos && elRotulos.parentNode) {
+      elSalas = document.createElement('div');
+      elSalas.className = 'rotulos rotulos-salas'; elSalas.setAttribute('aria-hidden', 'true');
+      elRotulos.parentNode.insertBefore(elSalas, elRotulos.nextSibling);
+    }
+    function rotularSalas(i) {
+      if (!elSalas || andarRotulado === i) return;
+      andarRotulado = i; salaRotulo = -1; rotSalas = []; elSalas.textContent = '';
+      if (i < 0) return;
+      var def = ANDARES[i];
+      def.squads.forEach(function (s, k) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'rotulo rotulo-sala'; b.tabIndex = -1; b.style.setProperty('--cor', def.cor);
+        b.innerHTML = '<i>' + (k + 1) + '</i><b>' + T.esc(s.nome) + '</b><span>' + T.fmt.int(s.qtd || 0) + '</span>';
+        b.addEventListener('click', function () { if (cb.aoClicarSala) cb.aoClicarSala(def.n, k); });
+        b.addEventListener('pointerenter', function () { salaRotulo = k; });
+        b.addEventListener('pointerleave', function () { if (salaRotulo === k) salaRotulo = -1; });
+        elSalas.appendChild(b); rotSalas.push(b);
+      });
+    }
+    function atualizarRotulosSalas() {
+      if (!rotSalas.length || sel < 0) return;
+      var a = andares[sel], limite = larg - margemAlvo - 20;
+      for (var k = 0; k < rotSalas.length; k++) {
+        var s = a.def.setores[k];
+        /* o rótulo flutua sobre o meio da sala; o da sala em que você já está fica escondido */
+        vRot.set(Math.cos(s.meio) * 6.4, a.g.position.y + 1.7, Math.sin(s.meio) * 6.4).project(camera);
+        var x = (vRot.x * 0.5 + 0.5) * larg, y = (-vRot.y * 0.5 + 0.5) * alt;
+        var ok = !voo && k !== sala && livroFoco < 0 && !escolhido && vRot.z < 1 && x > 90 && x < limite && y > 96 && y < alt - 46;
+        rotSalas[k].style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,0) translate(-50%,-50%)';
+        rotSalas[k].style.opacity = ok ? '' : '0';
+        rotSalas[k].style.pointerEvents = ok ? '' : 'none';
+        rotSalas[k].classList.toggle('ativo', salaRotulo === k || salaSob === k || sala === k);
+      }
+    }
+
+    /* ==========================================================================
        PONTEIRO: passar o mouse e clicar em andares e agentes
        ======================================================================== */
     var raio = new THREE.Raycaster(), ponteiro = new THREE.Vector2(), precisaRaio = false, apertou = null, px = 0, py = 0;
 
+    /* O que está sob o ponteiro, por ordem de prioridade:
+       livro da estante → agente (só com uma sala aberta) → sala do andar aberto → outro andar.
+       Com o andar aberto e nenhuma sala escolhida, a sala inteira é o alvo do clique:
+       assim "clicar no grupo" sempre entra na sala, mesmo acertando um boneco. */
+    function apontarLivro(i) {
+      if (i === livroSob) return;
+      livroSob = i;
+      var p = IE >= 0 ? andares[IE].peca : null;
+      if (p && p.apontar) p.apontar(i);
+    }
     function lancarRaio() {
       raio.setFromCamera(ponteiro, camera);
-      var novo = null, andarSob = -1, hits;
-      if (sel >= 0) {
-        hits = raio.intersectObject(andares[sel].agentes, false);
-        if (hits.length && hits[0].instanceId != null) novo = { a: andares[sel], i: hits[0].instanceId };
+      var novo = null, andarSob = -1, livro = -1, novaSala = -1, hits, a = sel >= 0 ? andares[sel] : null;
+      if (a) {
+        if (a.peca && a.peca.livros) { hits = raio.intersectObjects(a.peca.livros, false); if (hits.length) livro = hits[0].object.userData.livro; }
+        if (livro < 0 && sala >= 0) {
+          hits = raio.intersectObject(a.agentes, false);
+          if (hits.length && hits[0].instanceId != null) novo = { a: a, i: hits[0].instanceId };
+        }
+        if (livro < 0 && !novo) {
+          var o = raio.ray.origin, d = raio.ray.direction, dist = d.y < -0.0001 ? (a.g.position.y + PISO - o.y) / d.y : -1;
+          if (dist > 0) novaSala = T.salaEm(a.def, o.x + d.x * dist, o.z + d.z * dist);
+          if (novaSala >= 0 && novaSala === sala) novaSala = -2;   /* já está dentro desta sala: nada a destacar */
+        }
       }
-      if (!novo) {
+      if (!novo && livro < 0 && novaSala === -1) {
         hits = raio.intersectObjects(toques, false);
         if (hits.length && hits[0].object.userData.andar !== sel) andarSob = hits[0].object.userData.andar;
       }
+      apontarLivro(livro);
+      salaSob = novaSala >= 0 ? novaSala : -1;
       if ((novo && (!destaque || destaque.a !== novo.a || destaque.i !== novo.i)) || (!novo && destaque)) {
         var antigo = destaque; destaque = novo;
         if (antigo) { antigo.a.escala[antigo.i] = 1; pintar(antigo.a, antigo.i); posicionar(antigo.a, antigo.i, tAgora); antigo.a.agentes.instanceMatrix.needsUpdate = true; }
         if (novo) { novo.a.escala[novo.i] = 1.7; pintar(novo.a, novo.i); posicionar(novo.a, novo.i, tAgora); novo.a.agentes.instanceMatrix.needsUpdate = true; }
       }
       passandoAndar = andarSob;
-      canvas.style.cursor = novo || andarSob >= 0 ? 'pointer' : '';
-      if (cb.aoPassar) cb.aoPassar(novo ? { tipo: 'agente', andar: novo.a.def.n, idx: novo.i, x: px, y: py } : andarSob >= 0 ? { tipo: 'andar', andar: andarSob + 1, x: px, y: py } : null);
+      canvas.style.cursor = novo || andarSob >= 0 || salaSob >= 0 || livro >= 0 ? 'pointer' : '';
+      if (cb.aoPassar) {
+        cb.aoPassar(novo ? { tipo: 'agente', andar: novo.a.def.n, idx: novo.i, x: px, y: py }
+          : livro >= 0 ? { tipo: 'livro', livro: livro, x: px, y: py }
+          : salaSob >= 0 ? { tipo: 'sala', andar: sel + 1, sala: salaSob, x: px, y: py }
+          : andarSob >= 0 ? { tipo: 'andar', andar: andarSob + 1, x: px, y: py } : null);
+      }
     }
     function lerPonteiro(e) {
       var b = canvas.getBoundingClientRect();
@@ -666,7 +1142,7 @@
       ponteiro.set(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
     }
     canvas.addEventListener('pointermove', function (e) { lerPonteiro(e); precisaRaio = true; });
-    canvas.addEventListener('pointerleave', function () { passandoAndar = -1; precisaRaio = false; if (cb.aoPassar) cb.aoPassar(null); });
+    canvas.addEventListener('pointerleave', function () { passandoAndar = -1; salaSob = -1; apontarLivro(-1); precisaRaio = false; if (cb.aoPassar) cb.aoPassar(null); });
     canvas.addEventListener('pointerdown', function (e) { apertou = { x: e.clientX, y: e.clientY, t: Date.now() }; });
     canvas.addEventListener('pointerup', function (e) {
       if (!apertou) return;
@@ -675,6 +1151,8 @@
       if (moveu > 7 || demorou > 650 || voo) return;
       lerPonteiro(e); lancarRaio();
       if (destaque) { if (cb.aoClicarAgente) cb.aoClicarAgente(destaque.a.def.n, destaque.i); }
+      else if (livroSob >= 0) { if (cb.aoClicarLivro) cb.aoClicarLivro(livroSob); }
+      else if (salaSob >= 0) { if (cb.aoClicarSala) cb.aoClicarSala(sel + 1, salaSob); }
       else if (passandoAndar >= 0) { if (cb.aoClicarAndar) cb.aoClicarAndar(passandoAndar + 1); }
       else if (cb.aoClicarVazio) cb.aoClicarVazio();
     });
@@ -732,6 +1210,11 @@
         a.flash = Math.max(0, a.flash - dt * 2.4);
         a.matAro.color.copy(a.cor).multiplyScalar(1.7 + a.brilho * 1.9);
         a.matVidro.opacity = 0.045 + Math.min(1.5, a.brilho) * 0.05;
+        /* mesas e mobília só são desenhadas no andar aberto; os monitores acesos aparecem na torre toda (menos no modo leve) */
+        a.estacoes.visible = a.mobilia.visible = sel === i;
+        a.telas.visible = sel === i || modo === 'alta';
+        a.aroTopo.visible = !(sel === i && (sala >= 0 || livroFoco >= 0));   /* de dentro da sala, o aro do teto cortaria a vista */
+        a.teloes.visible = sel === i && sala >= 0;
         if (a.peca) a.peca.atualizar(t, dt);
         if (!calmo && a.moveis.length) {
           for (var m = 0; m < a.moveis.length; m++) posicionar(a, a.moveis[m], t);
@@ -764,11 +1247,24 @@
       matNucleo.uniforms.uTopo.value = andares[N - 1].g.position.y + 2 - BASE;
       if (marcador.visible) { anelSel.scale.setScalar(1 + 0.18 * Math.sin(t * 5)); feixe.material.opacity = 0.45 + 0.2 * Math.sin(t * 5); }
 
+      /* quanto mais perto a câmera, menos brilho: de dentro da sala o excesso de luz esconderia os móveis */
+      var brilhoAlvo = sel < 0 ? 0.6 : (sala >= 0 || escolhido || livroFoco >= 0) ? 0.14 : 0.4;
+      bloom.strength += (brilhoAlvo - bloom.strength) * Math.min(1, dt * 3);
+
+      /* salas: luz na que está sob o ponteiro (ou sob o rótulo) e na que está aberta */
+      var salaLuz = salaRotulo >= 0 ? salaRotulo : salaSob;
+      acender(luzSobre, sel >= 0 && salaLuz >= 0 && salaLuz !== sala ? andares[sel] : null, salaLuz);
+      if (luzAberta.visible) luzAberta.material.opacity = 0.06 + 0.02 * Math.sin(t * 2.2);
+
       /* câmera: voo suave até o destino, depois o usuário assume */
       if (voo) {
         voo.t += dt;
         var u = Math.min(1, voo.t / voo.dur); u = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
-        camera.position.lerpVectors(voo.p0, voo.p1, u); controls.target.lerpVectors(voo.a0, voo.a1, u);
+        if (voo.arco) {
+          var giroVoo = voo.arco.g0 + voo.arco.dg * u, raioVoo = voo.arco.r0 + (voo.arco.r1 - voo.arco.r0) * u;
+          camera.position.set(Math.cos(giroVoo) * raioVoo, voo.p0.y + (voo.p1.y - voo.p0.y) * u, Math.sin(giroVoo) * raioVoo);
+        } else camera.position.lerpVectors(voo.p0, voo.p1, u);
+        controls.target.lerpVectors(voo.a0, voo.a1, u);
         camera.lookAt(controls.target);
         if (u >= 1) { voo = null; controls.enabled = true; }
       } else {
@@ -778,6 +1274,7 @@
 
       if (precisaRaio && !voo) { precisaRaio = false; lancarRaio(); }
       atualizarRotulos();
+      atualizarRotulosSalas();
 
       if (modo === 'alta') composer.render(dt); else renderer.render(scene, camera);
     }
@@ -791,7 +1288,9 @@
     return {
       vazia: false,
       irPara: irPara,
+      irParaSala: irParaSala,
       focarAgente: focarAgente,
+      focarLivro: focarLivro,
       limparFoco: limparFoco,
       entrar: entrar,
       pacote: pacote,
@@ -801,9 +1300,10 @@
       margemDireita: function (px) { margemAlvo = Math.max(0, px || 0); },
       qualidade: qualidade,
       qualidadeAtual: function () { return modo; },
-      reuniaoAtiva: function (b) { var p = andares[6].peca; if (p && p.reuniao) p.reuniao(b); },
-      orcamento: function (fracao) { var p = andares[5].peca; if (p && p.orcamento) p.orcamento(fracao); },
-      andarAtual: function () { return sel + 1; }
+      reuniaoAtiva: function (b) { var p = IR >= 0 ? andares[IR].peca : null; if (p && p.reuniao) p.reuniao(b); },
+      orcamento: function (fracao) { var p = IF >= 0 ? andares[IF].peca : null; if (p && p.orcamento) p.orcamento(fracao); },
+      andarAtual: function () { return sel + 1; },
+      salaAtual: function () { return sala; }
     };
   };
 })(window);

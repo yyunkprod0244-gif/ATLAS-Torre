@@ -58,8 +58,12 @@
     video: 50, post: 25, comentarios: 9,
     lancamento: 15, pagamento: 1500,
     lembrete: 20,
-    memoria: 8, difusao: 40
+    memoria: 8, difusao: 40,
+    estudo: 14
   };
+
+  /* andar da biblioteca (0 se ele for removido da configuração) */
+  var N_EST = (T.andarPorId('estudo') || { n: 0 }).n;
 
   var ORC_TOTAL = T.CONFIG.orcamento.reduce(function (a, c) { return a + c.planejado; }, 0);
   var ORC_TRAFEGO = (T.CONFIG.orcamento.filter(function (c) { return c.id === 'trafego'; })[0] || { planejado: 0 }).planejado;
@@ -94,8 +98,9 @@
     o.gastos = Math.round(ORC_TOTAL / 30 * (0.82 + r() * 0.4));
     o.lembretes = n('lembrete'); o.memorias = n('memoria'); o.difusoes = n('difusao');
     o.atas = 0; /* calculado pela agenda */
+    o.estudos = N_EST ? n('estudo') : 0;
     o.msgs = o.info + o.curriculos + o.followups + o.leads + o.qualificados + o.propostas + o.vendas + o.otimizacoes +
-      o.videos * 4 + o.posts + Math.round(o.comentarios / 3) + o.lancamentos + o.pagamentos + o.lembretes + o.memorias + o.difusoes;
+      o.videos * 4 + o.posts + Math.round(o.comentarios / 3) + o.lancamentos + o.pagamentos + o.lembretes + o.memorias + o.difusoes + o.estudos;
     o.decisoes = Math.round(o.msgs * (0.30 + r() * 0.04));
     o.tarefas = Math.round(o.msgs * 2.5);
     cacheDias[k] = o;
@@ -149,6 +154,10 @@
     hoje.pendentes = rint(4, 11);
     hoje.atas = 0;
 
+    /* a marca passou a ser Atlas Digital Engineering: descarta, uma única vez,
+       o nome antigo que possa ter ficado salvo neste navegador */
+    if (guarda.ler('torre.marca', 0) !== 2) { guarda.gravar('torre.empresa', null); guarda.gravar('torre.marca', 2); }
+
     E = {
       dia: F.chaveDia(d),
       hoje: hoje,
@@ -156,7 +165,15 @@
       porAndar: T.ANDARES.map(function () { return { feed: [], eventos: 0 }; }),
       vendas: [], campanhas: [], fila: [], aPublicar: [], posts: [], plataformas: [], inbox: [],
       orcamento: [], reunioesUsuario: [],
-      empresa: guarda.ler('torre.empresa', null) || T.CONFIG.empresa.nome
+      empresa: guarda.ler('torre.empresa', null) || T.CONFIG.empresa.nome,
+      /* estudo: o que é seu de verdade (fica salvo neste navegador) */
+      estudo: {
+        lidos: guarda.ler('torre.lidos', null) || {},
+        salario: guarda.ler('torre.salario', null) || { valor: T.SALARIO ? T.SALARIO.padrao : 2000, essenciais: null },
+        passos: guarda.ler('torre.lancamento', null) || {},
+        /* plano de 90 dias: dinheiro de entrada, dia em que você começou (AAAA-MM-DD) e os seus números reais */
+        plano: guarda.ler('torre.plano', null) || { capital: T.PLANO ? T.PLANO.padrao : 3000, inicio: null, numeros: {} }
+      }
     };
 
     /* --- vendas de hoje (para a receita bater com a lista) --- */
@@ -224,8 +241,9 @@
       1 / RITMO.post + 1 / RITMO.comentarios,
       1 / RITMO.lancamento + 1 / RITMO.pagamento,
       1 / RITMO.lembrete,
-      1 / RITMO.memoria + 1 / RITMO.difusao];
-    E.porAndar.forEach(function (p, j) { p.eventos = Math.floor(taxa[j] * 86400 * f); });
+      1 / RITMO.memoria + 1 / RITMO.difusao,
+      1 / RITMO.estudo];
+    E.porAndar.forEach(function (p, j) { p.eventos = Math.floor((taxa[j] || 0) * 86400 * f); });
 
     /* --- reuniões marcadas por você --- */
     E.reunioesUsuario = guarda.ler('torre.reunioes', []).map(function (m) {
@@ -405,7 +423,7 @@
       });
     },
     memoria: function () {
-      var a = agenteAtivo(8), sorte = Math.random(), n = rint(1, 7);
+      var a = agenteAtivo(8), sorte = Math.random(), n = um(T.ANDARES.filter(function (x) { return x.n !== 8; })).n;
       hoje.memorias++;
       if (sorte < 0.22) return evento({ tipo: 'memoria', andar: 8, para: n, agente: a, texto: ag(8, a) + ' repriorizou ' + rint(3, 24) + ' tarefas de ' + nomeAndar(n) });
       if (sorte < 0.3) return evento({ tipo: 'memoria', andar: 8, para: n, agente: a, texto: ag(8, a) + ' detectou fila acumulada em ' + nomeAndar(n) + ' e redistribuiu o trabalho' });
@@ -417,8 +435,24 @@
     },
     difusao: function () {
       hoje.difusoes++;
-      var o = evento({ tipo: 'difusao', andar: 8, texto: 'Mega Brain sincronizou os 8 andares' });
+      var o = evento({ tipo: 'difusao', andar: 8, texto: 'Mega Brain sincronizou os ' + T.ANDARES.length + ' andares' });
       emitir('difusao', o);
+    },
+    /* 9º andar: os agentes da biblioteca resumem os livros e mandam lições aos outros andares */
+    estudo: function () {
+      if (!N_EST) return;
+      var a = agenteAtivo(N_EST), est = andar(N_EST), sala = est.squads[est.agentes[a].squad].nome.toLowerCase(), sorte = Math.random();
+      var livro = um(T.BIBLIOTECA && T.BIBLIOTECA.length ? T.BIBLIOTECA : [{ titulo: 'Manual da torre' }]);
+      hoje.estudos++;
+      if (sorte < 0.14) {
+        var d = um([[2, 'uma técnica de negociação'], [3, 'um modelo de campanha'], [4, 'o roteiro de uma videoaula'], [6, 'uma planilha de orçamento'], [1, 'um guia de boas-vindas']]);
+        return evento({ tipo: 'estudo', andar: N_EST, para: d[0], via: true, agente: a, texto: ag(N_EST, a) + ' enviou ' + d[1] + ' para ' + nomeAndar(d[0]) });
+      }
+      evento({
+        tipo: 'estudo', andar: N_EST, agente: a,
+        texto: ag(N_EST, a) + um([' resumiu um capítulo de «' + livro.titulo + '»', ' criou ' + rint(6, 20) + ' fichas de revisão de ' + sala, ' preparou um exercício de ' + sala,
+          ' organizou a estante de ' + sala, ' gravou uma aula curta sobre «' + livro.titulo + '»'])
+      });
     }
   };
 
@@ -516,7 +550,7 @@
     if (isNaN(ini)) return { erro: 'Não entendi a data e a hora da reunião.' };
     var titulo = String(o.titulo || '').trim().slice(0, 90) || 'Reunião';
     var dur = Math.max(5, Math.min(240, Math.round(o.dur || 30)));
-    var ands = (o.andares || []).map(Number).filter(function (n, i, arr) { return n >= 1 && n <= 8 && arr.indexOf(n) === i; });
+    var ands = (o.andares || []).map(Number).filter(function (n, i, arr) { return n >= 1 && n <= T.ANDARES.length && arr.indexOf(n) === i; });
     if (ands.indexOf(7) < 0) ands.push(7);
     ands.sort();
     var m = { id: 'u-' + Date.now() + '-' + (++seq), titulo: titulo, inicio: ini, fim: new Date(ini.getTime() + dur * 60000), dur: dur, andares: ands, tipo: 'usuario', origem: o.origem || 'manual' };
@@ -574,6 +608,7 @@
      ENTRADA DE INFORMAÇÃO (1º andar) — o que você registra de verdade
      ======================================================================== */
   var ROTAS = [
+    [9, /(estud|\blivros?\b|\bcursos?\b|aprender|\baulas?\b|treinament|biblioteca)/],
     [7, /(reuni|agenda|\bcall\b|marcar|horario|encontro)/],
     [6, /(pagar|pagamento|pagou|boleto|nota fiscal|imposto|custo|fatura|reembols|cobranc|r\$|dinheiro)/],
     [5, /(publicar|postar|\bposts?\b|instagram|tiktok|youtube|facebook|linkedin|stories|reels)/],
@@ -584,8 +619,85 @@
   ];
   function classificar(texto) {
     var t = T.normalizar(texto);
-    for (var i = 0; i < ROTAS.length; i++) if (ROTAS[i][1].test(t)) return ROTAS[i][0];
+    for (var i = 0; i < ROTAS.length; i++) if (ROTAS[i][1].test(t) && andar(ROTAS[i][0])) return ROTAS[i][0];
     return 8;
+  }
+
+  /* ==========================================================================
+     ESTUDO (9º andar) — livros lidos, plano do salário e checklist de
+     lançamento. Como as reuniões, isto é seu de verdade e fica salvo aqui.
+     ======================================================================== */
+  function livrosLidos() {
+    var n = 0;
+    (T.BIBLIOTECA || []).forEach(function (b) { if (E.estudo.lidos[b.id]) n++; });
+    return n;
+  }
+  function marcarLido(id, sim) {
+    var b = T.livro && T.livro(id);
+    if (!b) return false;
+    var antes = !!E.estudo.lidos[id];
+    if (sim) E.estudo.lidos[id] = true; else delete E.estudo.lidos[id];
+    guarda.gravar('torre.lidos', E.estudo.lidos);
+    if (sim && !antes && N_EST) evento({ tipo: 'leitura', andar: N_EST, para: 8, destaque: true, texto: 'Você concluiu o livro «' + b.titulo + '»' });
+    emitir('estudo');
+    return true;
+  }
+  function planoSalario() { return T.planoSalario(E.estudo.salario.valor, E.estudo.salario.essenciais); }
+  function definirSalario(valor, essenciais) {
+    valor = Math.round(+valor);
+    if (!(valor > 0)) return planoSalario();
+    var ess = essenciais === '' || essenciais == null || isNaN(+essenciais) ? null : Math.max(0, Math.round(+essenciais));
+    E.estudo.salario = { valor: Math.min(valor, 100000000), essenciais: ess };
+    guarda.gravar('torre.salario', E.estudo.salario);
+    emitir('estudo');
+    return planoSalario();
+  }
+  function lancamento() { return T.progressoLancamento(E.estudo.passos); }
+  function marcarPasso(id, sim) {
+    if (sim) E.estudo.passos[id] = true; else delete E.estudo.passos[id];
+    guarda.gravar('torre.lancamento', E.estudo.passos);
+    emitir('estudo');
+    return lancamento();
+  }
+  /* ---------- plano de 90 dias com dinheiro de verdade ---------- */
+  function salvarPlano() { guarda.gravar('torre.plano', E.estudo.plano); emitir('estudo'); }
+  function planoLancamento() {
+    var pl = E.estudo.plano, dia = 0, i;
+    if (pl.inicio) {
+      var p = pl.inicio.split('-'), ini = new Date(+p[0], +p[1] - 1, +p[2]);
+      dia = Math.max(1, Math.round((inicioDoDia(agora()) - ini) / 86400000) + 1);
+    }
+    var fase = dia ? T.faseDoPlano(dia) : -1, metas = T.PLANO.metas.map(function (m) {
+      var feito = Math.max(0, +(pl.numeros || {})[m.id] || 0);
+      return { id: m.id, nome: m.nome, meta: m.meta, feito: feito, fracao: m.meta ? feito / m.meta : 0, dinheiro: !!m.dinheiro };
+    });
+    for (i = 0; i < metas.length; i++) metas[i].ritmo = dia ? Math.min(1, dia / T.PLANO.dias) : 0;
+    return { capital: pl.capital, divisao: T.planoCapital(pl.capital), inicio: pl.inicio, dia: dia, fase: fase, metas: metas, terminou: dia > T.PLANO.dias };
+  }
+  function definirCapital(v) {
+    v = Math.round(+v);
+    if (v >= 0 && v <= 100000000) { E.estudo.plano.capital = v; salvarPlano(); }
+    return planoLancamento();
+  }
+  function iniciarPlano(sim) {
+    E.estudo.plano.inicio = sim ? F.chaveDia(agora()) : null;
+    salvarPlano();
+    if (sim && N_EST) evento({ tipo: 'leitura', andar: N_EST, para: 8, destaque: true, texto: 'Você começou o plano de 90 dias com ' + F.brl(E.estudo.plano.capital) });
+    return planoLancamento();
+  }
+  function definirNumeroPlano(id, valor) {
+    var n = Math.max(0, Math.round(+valor || 0));
+    E.estudo.plano.numeros = E.estudo.plano.numeros || {};
+    E.estudo.plano.numeros[id] = n;
+    guarda.gravar('torre.plano', E.estudo.plano);   /* sem emitir: o formulário já se redesenha sozinho */
+    return planoLancamento();
+  }
+
+  /* quantas vendas de cada produto a simulação registrou hoje: { nome do plano: quantidade } */
+  function vendasPorPlano() {
+    var c = {};
+    E.vendas.forEach(function (v) { c[v.plano] = (c[v.plano] || 0) + 1; });
+    return c;
   }
   function registrarInfo(texto, origem) {
     texto = String(texto || '').trim().slice(0, 240);
@@ -677,7 +789,7 @@
   function kpisGlobais() {
     return [
       { rotulo: 'Agentes ativos', valor: F.int(ativos), nota: 'de ' + F.int(T.TOTAIS.agentes) },
-      { rotulo: 'Skills', valor: F.int(T.TOTAIS.skills), nota: 'em 8 andares' },
+      { rotulo: 'Skills', valor: F.int(T.TOTAIS.skills), nota: 'em ' + T.ANDARES.length + ' andares' },
       { rotulo: 'Tarefas hoje', valor: F.compacto(hoje.tarefas) },
       { rotulo: 'Receita hoje', valor: F.brlc(hoje.receita) }
     ];
@@ -685,6 +797,15 @@
 
   function kpis(n) {
     var fin, re, prox, ontem = totaisDoDia(addDias(agora(), -1));
+    if (n === N_EST) {
+      var lc = lancamento(), acervo = (T.BIBLIOTECA || []).length, li = livrosLidos();
+      return [
+        tile('Livros na biblioteca', F.int(acervo), { nota: andar(n).squads.length + ' salas de estudo' }),
+        tile('Você já leu', li + ' de ' + acervo, { nota: li ? 'continue de onde parou' : 'comece por um dos guias' }),
+        tile('Resumos e aulas hoje', F.compacto(hoje.estudos), { delta: 'estudos', serie: 'estudos' }),
+        tile('Lançamento da empresa', F.pct(lc.fracao), { nota: lc.feitos + ' de ' + lc.total + ' passos feitos' })
+      ];
+    }
     switch (n) {
       case 1:
         return [
@@ -743,7 +864,7 @@
           tile('Mensagens roteadas hoje', F.compacto(hoje.msgs), { delta: 'msgs', serie: 'msgs' }),
           tile('Decisões automáticas', F.compacto(hoje.decisoes), { delta: 'decisoes' }),
           tile('Tempo de resposta', '0,4 s', { nota: 'da chegada à distribuição' }),
-          tile('Andares sincronizados', '8 de 8', { nota: 'última sincronização há instantes' })
+          tile('Andares sincronizados', T.ANDARES.length + ' de ' + T.ANDARES.length, { nota: 'última sincronização há instantes' })
         ];
     }
   }
@@ -767,6 +888,8 @@
       { n: 7, texto: re.feitas + ' reuniões concluídas, ' + re.andamento + ' em andamento' + (re.proxima ? ' e a próxima às ' + F.hora(re.proxima.inicio) : '') + '; ' + hoje.atas + ' atas geradas.' },
       { n: 8, texto: F.compacto(hoje.msgs) + ' mensagens roteadas entre os andares e ' + F.compacto(hoje.decisoes) + ' decisões tomadas sem intervenção humana.' }
     ];
+    var lc = N_EST ? lancamento() : null;
+    if (N_EST) linhas.push({ n: N_EST, texto: F.compacto(hoje.estudos) + ' resumos e aulas preparados. Você leu ' + livrosLidos() + ' de ' + (T.BIBLIOTECA || []).length + ' livros e concluiu ' + lc.feitos + ' de ' + lc.total + ' passos do lançamento da empresa.' });
 
     var destaques = [];
     if (top) destaques.push('Agente do dia: ' + top.agente.nome + ' (' + top.agente.cargo + ', ' + top.andar.nome + '), com ' + F.int(top.tarefas) + ' tarefas.');
@@ -782,6 +905,13 @@
     contas().forEach(function (c) { if (!c.paga && c.falta <= 2) alertas.push(c.nome + ' vence ' + (c.falta === 0 ? 'hoje' : c.falta === 1 ? 'amanhã' : 'em 2 dias') + ': ' + F.brl(c.valor) + '.'); });
     if (E.fila.length > 9) { alertas.push('A fila de vídeo está acima do normal (' + E.fila.length + ' vídeos).'); amanha.push('Deslocar agentes de Finalização para aliviar a fila de vídeo.'); }
     var conv = hoje.leads ? hoje.vendas / hoje.leads : 0;
+    /* o que é real vem primeiro: o dia do seu plano de 90 dias e o próximo passo do checklist */
+    var pl = N_EST && T.PLANO ? planoLancamento() : null;
+    if (pl && pl.dia && !pl.terminou) {
+      var fz = T.PLANO.fases[pl.fase], ct = pl.metas[0];
+      amanha.unshift('Dia ' + pl.dia + ' de ' + T.PLANO.dias + ' do seu plano (' + fz.nome.toLowerCase() + '): ' + fz.objetivo.charAt(0).toLowerCase() + fz.objetivo.slice(1) + ' Contatos feitos: ' + F.int(ct.feito) + ' de ' + F.int(ct.meta) + '.');
+    }
+    if (lc && lc.proximos.length) amanha.splice(pl && pl.dia && !pl.terminou ? 1 : 0, 0,'Próximo passo do lançamento da empresa: ' + lc.proximos[0].texto.charAt(0).toLowerCase() + lc.proximos[0].texto.slice(1) + '.');
     if (melhorCamp) amanha.push('Aumentar a verba de «' + melhorCamp.nome + '», a campanha com o lead mais barato.');
     amanha.push(conv < 0.05 ? 'A conversão de lead em venda está em ' + F.pct(conv, 1) + ': reforçar o follow-up das propostas abertas.' : 'Manter o ritmo de follow-up: a conversão está em ' + F.pct(conv, 1) + '.');
     if (topPlat) amanha.push('Priorizar publicações no ' + topPlat.nome + ', a rede com mais visualizações hoje.');
@@ -804,9 +934,30 @@
 
   /* ---------- retrato compacto da empresa (enviado ao Jarvis com IA) ---------- */
   function snapshot() {
-    var d = agora(), fin = financeiro(), re = resumoReunioes(), rs = resumo();
+    var d = agora(), fin = financeiro(), re = resumoReunioes(), rs = resumo(), ps = planoSalario(), lc = lancamento(), est = N_EST ? andar(N_EST) : null;
     return {
-      empresa: E.empresa, agora: F.dataLonga(d) + ', ' + F.hora(d), aviso: 'Todos os números são simulados (fictícios).',
+      produtos: (T.CATALOGO && T.CATALOGO.produtos || []).map(function (p) { return { nome: p.nome, preco: p.preco, cobranca: p.mensal ? 'por mês' : 'pagamento único', prazo: p.prazo, resumo: p.resumo }; }),
+      estudo: est ? {
+        aviso: 'Estes dados de estudo são reais: é o progresso do usuário.',
+        livros: (T.BIBLIOTECA || []).map(function (b) { return { id: b.id, titulo: b.titulo, sala: est.squads[b.sala].nome, lido: !!E.estudo.lidos[b.id] }; }),
+        salario: { liquido: ps.valor, divisaoPorMes: ps.linhas.map(function (l) { return { nome: l.nome, valor: l.valor }; }) },
+        lancamentoDaEmpresa: { passosFeitos: lc.feitos, passosNoTotal: lc.total, proximosPassos: lc.proximos.slice(0, 4).map(function (p) { return p.texto; }) },
+        planoDe90Dias: (function () {
+          var pl = planoLancamento(), fz = pl.fase >= 0 ? T.PLANO.fases[pl.fase] : null;
+          return {
+            dinheiroDeEntrada: pl.capital, comecou: !!pl.dia, dia: pl.dia || null,
+            divisao: pl.divisao.linhas.map(function (l) { return { nome: l.nome, valor: l.valor, quando: l.quando }; }),
+            faseAtual: fz ? { nome: fz.nome, objetivo: fz.objetivo, tarefas: fz.tarefas.map(function (t) { return t[0]; }), meta: fz.meta } : null,
+            seusNumeros: pl.metas.map(function (m) { return { nome: m.nome, feito: m.feito, metaEm90Dias: m.meta }; }),
+            regras: T.PLANO.regras.map(function (r) { return r[0]; })
+          };
+        })()
+      } : null,
+      skillsExternas: (T.SKILLS_EXTERNAS || []).map(function (s) {
+        var l = T.lugarDaSkill(s);
+        return { nome: s.nome, github: 'https://github.com/' + s.repo, andar: l ? l.andar.n + 'º andar, ' + l.andar.nome : '', sala: s.sala, instalada: false, oQueFaz: s.resumo, usoNaEmpresa: s.uso, precisa: s.precisa, atencao: s.atencao };
+      }),
+      empresa: E.empresa, agora: F.dataLonga(d) + ', ' + F.hora(d), agoraISO: F.chaveDia(d) + 'T' + F.hora(d), aviso: 'Todos os números são simulados (fictícios).',
       totais: { agentes: T.TOTAIS.agentes, agentesAtivos: ativos, skills: T.TOTAIS.skills, tarefasHoje: hoje.tarefas },
       andares: T.ANDARES.map(function (a) {
         return { andar: a.n, nome: a.titulo, missao: a.missao, agentes: a.agentes.length, skills: a.skills.length, squads: a.squads.map(function (s) { return s.nome; }) };
@@ -832,7 +983,8 @@
       },
       reunioes: {
         hoje: re.total, concluidas: re.feitas, emAndamento: emAndamento().map(function (m) { return m.titulo; }),
-        proximas: reunioes().filter(function (m) { return m.estado === 'agendada' && m.tipo !== 'auto'; }).slice(0, 6).map(function (m) { return { titulo: m.titulo, quando: F.dataMedia(m.inicio) + ' ' + F.hora(m.inicio), minutos: m.dur }; })
+        proximas: reunioes().filter(function (m) { return m.estado === 'agendada' && m.tipo !== 'auto'; }).slice(0, 6).map(function (m) { return { titulo: m.titulo, quando: F.dataMedia(m.inicio) + ' ' + F.hora(m.inicio), minutos: m.dur }; }),
+        marcadasPorVoce: E.reunioesUsuario.filter(function (m) { return m.fim > d; }).slice(0, 12).map(function (m) { return { id: m.id, titulo: m.titulo, quando: F.dataMedia(m.inicio) + ' ' + F.hora(m.inicio) }; })
       },
       megaBrain: { mensagensRoteadas: hoje.msgs, decisoesAutomaticas: hoje.decisoes, destaques: rs.destaques, alertas: rs.alertas, recomendacoes: rs.amanha }
     };
@@ -904,6 +1056,20 @@
     removerReuniao: removerReuniao,
     registrarInfo: registrarInfo,
     classificar: classificar,
+    livrosLidos: livrosLidos,
+    lido: function (id) { return !!E.estudo.lidos[id]; },
+    marcarLido: marcarLido,
+    planoSalario: planoSalario,
+    definirSalario: definirSalario,
+    lancamento: lancamento,
+    passoFeito: function (id) { return !!E.estudo.passos[id]; },
+    marcarPasso: marcarPasso,
+    vendasPorPlano: vendasPorPlano,
+    planoLancamento: planoLancamento,
+    definirCapital: definirCapital,
+    iniciarPlano: iniciarPlano,
+    definirNumeroPlano: definirNumeroPlano,
+    andarEstudo: function () { return N_EST; },
     topAgentes: topAgentes,
     resumo: resumo,
     snapshot: snapshot,

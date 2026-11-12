@@ -79,10 +79,17 @@
 
   /* ==========================================================================
      PLANTA DO ANDAR
-     Cada andar é um disco. Os agentes sentam em anéis concêntricos em volta do
-     núcleo de dados; cada squad ocupa uma "fatia" do disco.
+     Cada andar é um disco. Em volta do núcleo de dados fica o átrio; dele saem
+     as SALAS, uma por squad, cada uma ocupando uma "fatia" do disco. Dentro da
+     sala, as mesas formam fileiras em arco, em duas alas separadas por um
+     corredor que vai da porta até a fachada. Junto à fachada fica a área de
+     convivência (sofás, plantas, mesas de reunião), montada por T.mobiliar().
+       RAIO      raio do andar            R_SALA    raio da parede do átrio
+       R0        raio da 1ª fileira       PASSO     distância entre fileiras
+       ESPACO    distância entre mesas    FOLGA     recuo junto às paredes (rad)
+       CORREDOR  largura do corredor      R_ESTAR   raio da área de convivência
      ======================================================================== */
-  var GEO = T.GEO = { RAIO: 10, R0: 2.9, PASSO: 0.68, ESPACO: 0.6, FOLGA: 0.075, MAX_ANEIS: 11 };
+  var GEO = T.GEO = { RAIO: 10, R_SALA: 2.72, R0: 3.2, PASSO: 0.62, ESPACO: 0.52, FOLGA: 0.075, MAX_ANEIS: 10, CORREDOR: 0.8, R_ESTAR: 9.42 };
 
   T.setores = function (pesos) {
     var soma = 0, i;
@@ -90,10 +97,20 @@
     var a = -Math.PI / 2, out = [];
     for (i = 0; i < pesos.length; i++) {
       var larg = Math.PI * 2 * pesos[i] / soma;
-      out.push({ ini: a, fim: a + larg });
+      out.push({ ini: a, fim: a + larg, meio: a + larg / 2 });
       a += larg;
     }
     return out;
+  };
+
+  /* Em qual sala (índice do squad) cai o ponto (x, z) do andar; -1 = átrio ou fora. */
+  T.salaEm = function (andar, x, z) {
+    var r = Math.sqrt(x * x + z * z);
+    if (r < GEO.R_SALA || r > GEO.RAIO + 0.45) return -1;
+    var a = Math.atan2(z, x), set = andar.setores;
+    if (a < set[0].ini) a += Math.PI * 2;
+    for (var k = 0; k < set.length; k++) if (a >= set[k].ini && a < set[k].fim) return k;
+    return set.length - 1;
   };
 
   function repartir(total, caps) {
@@ -108,26 +125,77 @@
     return out;
   }
 
-  /* Devolve "qtd" assentos: { x, z, ang, raio, squad, anel } */
+  /* Devolve "qtd" assentos: { x, z, ang, raio, squad, anel }.
+     Cada fileira (anel) de cada sala tem duas alas, uma de cada lado do corredor. */
   T.layout = function (qtd, pesos) {
     var set = T.setores(pesos), out = [], restante = qtd;
     for (var j = 0; j < GEO.MAX_ANEIS && restante > 0; j++) {
-      var raio = GEO.R0 + j * GEO.PASSO;
-      var caps = set.map(function (s) {
-        return Math.max(1, Math.floor((s.fim - s.ini - GEO.FOLGA) * raio / GEO.ESPACO));
-      });
+      var raio = GEO.R0 + j * GEO.PASSO, vao = GEO.CORREDOR / 2 / raio, alas = [];
+      for (var s = 0; s < set.length; s++) {
+        alas.push({ squad: s, ini: set[s].ini + GEO.FOLGA / 2, fim: set[s].meio - vao });
+        alas.push({ squad: s, ini: set[s].meio + vao, fim: set[s].fim - GEO.FOLGA / 2 });
+      }
+      var caps = alas.map(function (a) { return Math.max(0, Math.floor((a.fim - a.ini) * raio / GEO.ESPACO)); });
       var cabem = caps.reduce(function (a, b) { return a + b; }, 0);
+      if (!cabem) continue;
       var usar = cabem > restante ? repartir(restante, caps) : caps;
-      for (var k = 0; k < set.length; k++) {
-        var ini = set[k].ini + GEO.FOLGA / 2, fim = set[k].fim - GEO.FOLGA / 2, n = usar[k];
+      for (var k = 0; k < alas.length; k++) {
+        var n = usar[k];
         for (var m = 0; m < n; m++) {
-          var ang = ini + (fim - ini) * (m + 0.5) / n;
-          out.push({ x: Math.cos(ang) * raio, z: Math.sin(ang) * raio, ang: ang, raio: raio, squad: k, anel: j });
+          var ang = alas[k].ini + (alas[k].fim - alas[k].ini) * (m + 0.5) / n;
+          out.push({ x: Math.cos(ang) * raio, z: Math.sin(ang) * raio, ang: ang, raio: raio, squad: alas[k].squad, anel: j });
         }
         restante -= n;
       }
     }
     return out;
+  };
+
+  /* ==========================================================================
+     MOBÍLIA AUTOMÁTICA
+     Além de uma estação de trabalho por agente (mesa, computador e cadeira),
+     cada sala ganha sozinha uma área de convivência junto à fachada. O sorteio
+     depende só do nome do andar e da sala, então é sempre o mesmo.
+     ======================================================================== */
+  var MOVEIS = T.MOVEIS = {
+    sofa: { um: 'sofá', varios: 'sofás', larg: 1.0 },
+    planta: { um: 'planta', varios: 'plantas', larg: 0.44 },
+    mesa: { um: 'mesa de reunião', varios: 'mesas de reunião', larg: 1.3 },
+    armario: { um: 'armário', varios: 'armários', larg: 0.9 },
+    bebedouro: { um: 'bebedouro', varios: 'bebedouros', larg: 0.4 },
+    quadro: { um: 'quadro branco', varios: 'quadros brancos', larg: 0.9 },
+    estante: { um: 'estante de livros', varios: 'estantes de livros', larg: 1.0 },
+    leitura: { um: 'mesa de leitura', varios: 'mesas de leitura', larg: 1.2 }
+  };
+  var CONJUNTOS = [
+    ['planta', 'sofa', 'sofa', 'planta'], ['mesa', 'quadro', 'planta'], ['armario', 'armario', 'bebedouro', 'planta'],
+    ['planta', 'sofa', 'mesa'], ['quadro', 'armario', 'planta', 'bebedouro']
+  ];
+  var CONJUNTOS_ESTUDO = [['estante', 'estante', 'planta', 'leitura'], ['leitura', 'estante', 'estante'], ['estante', 'sofa', 'planta', 'estante']];
+
+  /* Devolve os móveis da área de convivência da sala k: [{ tipo, ang, raio }] */
+  T.mobiliar = function (andar, k) {
+    var s = andar.setores[k], r = T.rng('mobilia:' + andar.id + ':' + k), raio = GEO.R_ESTAR, out = [];
+    var conj = andar.id === 'estudo' ? CONJUNTOS_ESTUDO : CONJUNTOS;
+    var a1 = Math.floor(r() * conj.length), a2 = (a1 + 1 + Math.floor(r() * (conj.length - 1))) % conj.length;
+    var vao = (GEO.CORREDOR / 2 + 0.12) / raio;
+    [{ ini: s.ini + 0.05, fim: s.meio - vao, itens: conj[a1].slice() }, { ini: s.meio + vao, fim: s.fim - 0.05, itens: conj[a2].slice().reverse() }].forEach(function (lado) {
+      var arco = (lado.fim - lado.ini) * raio, usado = 0, cabem = [];
+      lado.itens.forEach(function (t) { var l = MOVEIS[t].larg + 0.14; if (usado + l <= arco) { cabem.push(t); usado += l; } });
+      var a = lado.ini + (arco - usado) / 2 / raio;
+      cabem.forEach(function (t) { var l = (MOVEIS[t].larg + 0.14) / raio; out.push({ tipo: t, ang: a + l / 2, raio: raio }); a += l; });
+    });
+    return out;
+  };
+
+  /* O que existe dentro da sala k, em palavras: { estacoes, itens: [{ tipo, qtd, texto }] } */
+  T.inventario = function (andar, k) {
+    var cont = {}, ordem = [];
+    T.mobiliar(andar, k).forEach(function (m) { if (!cont[m.tipo]) { cont[m.tipo] = 0; ordem.push(m.tipo); } cont[m.tipo]++; });
+    return {
+      estacoes: andar.squads[k].qtd || 0,
+      itens: ordem.map(function (t) { return { tipo: t, qtd: cont[t], texto: cont[t] + ' ' + (cont[t] === 1 ? MOVEIS[t].um : MOVEIS[t].varios) }; })
+    };
   };
 
   /* ==========================================================================
@@ -220,18 +288,37 @@
     if (T.TOTAIS) return T.TOTAIS;
     var totAg = 0, totSk = 0;
     T.ANDARES.forEach(function (andar) {
+      andar.setores = T.setores(andar.squads.map(function (s) { return s.peso; }));
       andar.skills = gerarSkills(andar);
       andar.agentes = gerarAgentes(andar);
+      andar.squads.forEach(function (s) { s.qtd = 0; });
+      andar.agentes.forEach(function (ag) { andar.squads[ag.squad].qtd++; });
       andar.categorias = andar.vocab.acoes.map(function (a) { return a[1]; })
         .filter(function (c, i, arr) { return arr.indexOf(c) === i; });
       totAg += andar.agentes.length;
       totSk += andar.skills.length;
     });
-    T.TOTAIS = { agentes: totAg, skills: totSk };
+    T.TOTAIS = { agentes: totAg, skills: totSk, andares: T.ANDARES.length, salas: T.ANDARES.reduce(function (a, x) { return a + x.squads.length; }, 0) };
     return T.TOTAIS;
   };
 
   T.andar = function (n) { return T.ANDARES[n - 1] || null; };
+  T.andarPorId = function (id) {
+    for (var i = 0; i < T.ANDARES.length; i++) if (T.ANDARES[i].id === id) return T.ANDARES[i];
+    return null;
+  };
+
+  /* Procura uma sala pelo nome do squad: devolve { andar, k } ou null.
+     "n" limita a busca a um andar; sem ele, vale a primeira sala que combinar. */
+  T.buscarSala = function (texto, n) {
+    var termos = termosDe(texto), achou = null;
+    if (!termos.length) return null;
+    T.ANDARES.forEach(function (a) {
+      if (achou || (n && a.n !== n)) return;
+      a.squads.forEach(function (s, k) { if (!achou && casa(T.normalizar(s.nome), termos)) achou = { andar: a, k: k }; });
+    });
+    return achou;
+  };
 
   /* ---------- busca (usada pela interface e pelo Jarvis) ---------- */
   function casa(busca, termos) {
