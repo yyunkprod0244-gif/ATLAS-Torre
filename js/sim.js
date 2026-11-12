@@ -953,9 +953,10 @@
           };
         })()
       } : null,
+      lembretes: T.Lembretes ? T.Lembretes.pendentes().slice(0, 10).map(function (l) { return { texto: l.texto, quando: F.dataMedia(new Date(l.quando)) + ' ' + F.hora(new Date(l.quando)) }; }) : [],
       skillsExternas: (T.SKILLS_EXTERNAS || []).map(function (s) {
         var l = T.lugarDaSkill(s);
-        return { nome: s.nome, github: 'https://github.com/' + s.repo, andar: l ? l.andar.n + 'º andar, ' + l.andar.nome : '', sala: s.sala, instalada: false, oQueFaz: s.resumo, usoNaEmpresa: s.uso, precisa: s.precisa, atencao: s.atencao };
+        return { nome: s.nome, link: T.linkDaSkill(s).url, andar: l ? l.andar.n + 'º andar, ' + l.andar.nome : '', sala: s.sala, instalada: s.instalado || false, oQueFaz: s.resumo, usoNaEmpresa: s.uso, precisa: s.precisa, atencao: s.atencao };
       }),
       empresa: E.empresa, agora: F.dataLonga(d) + ', ' + F.hora(d), agoraISO: F.chaveDia(d) + 'T' + F.hora(d), aviso: 'Todos os números são simulados (fictícios).',
       totais: { agentes: T.TOTAIS.agentes, agentesAtivos: ativos, skills: T.TOTAIS.skills, tarefasHoje: hoje.tarefas },

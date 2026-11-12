@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#010409">
+  <title>Jarvis — Atlas Digital Engineering</title>
+  <meta name="description" content="O Jarvis em forma de holograma: converse por voz ou texto com o assistente da Atlas Digital Engineering.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%2716%27 fill=%27%23010409%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2710%27 fill=%27none%27 stroke=%27%237fe4ff%27 stroke-width=%272%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%274%27 fill=%27%23c8f5ff%27/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/torre.css">
+  <link rel="stylesheet" href="css/paginas.css">
+</head>
+<body class="holo">
+  <div class="holo-palco" aria-hidden="true">
+    <canvas id="holoCanvas"></canvas>
+    <!-- se o 3D não puder ser criado, fica este holograma feito só com CSS -->
+    <div class="holo-reserva" id="holoReserva" hidden></div>
+  </div>
+
+  <header class="holo-topo">
+    <div class="holo-titulo"><b>JARVIS</b><span id="holoSub">Atlas Digital Engineering</span></div>
+    <nav aria-label="Outras páginas">
+      <a class="bt" href="index.html?semintro"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21V7l4-4 4 4v14M5 21h14M10 10h4M10 13.5h4M10 17h4"/></svg><span>Torre</span></a>
+      <a class="bt" href="dashboard.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V13M10 20V8M16 20V11M22 20H2M20 20V4"/></svg><span>Dashboard</span></a>
+      <a class="bt" href="site/index.html" target="_blank" rel="noopener"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg><span>Site</span></a>
+    </nav>
+  </header>
+
+  <aside class="holo-hud" aria-label="Painel do Jarvis">
+    <div class="hud-item"><small>Agora</small><b id="hudHora">--:--</b><p id="hudData"></p></div>
+    <div class="hud-item"><small>Seu plano de 90 dias</small><b id="hudPlano">—</b><p id="hudPlanoTxt"></p></div>
+    <div class="hud-item"><small>Próximo lembrete</small><b id="hudLembrete">—</b><p id="hudLembreteTxt"></p></div>
+    <div class="hud-item"><small>Torre · simulação</small><b id="hudVendas">—</b><p id="hudTorre"></p></div>
+  </aside>
+
+  <p class="holo-estado" id="holoEstado" aria-live="polite">pronto</p>
+  <button class="holo-falar" id="holoFalar" type="button" aria-label="Falar com o Jarvis (tecla M)" title="Falar (tecla M)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+
+  <!-- a conversa usa o mesmo Jarvis da torre (js/jarvis.js) -->
+  <div class="jarvis" id="jarvis" data-estado="parado">
+    <section class="jv-painel vidro" id="jvPainel" aria-label="Conversa com o Jarvis">
+      <header>
+        <div><b>CONVERSA</b><span id="jvStatus">modo local</span></div>
+        <span class="jv-modo" id="jvModo">modo local</span>
+        <button class="bt-icone" id="jvVoz" type="button" aria-pressed="true" aria-label="Voz do Jarvis"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>
+        <button class="bt-icone" id="jvFechar" type="button" hidden aria-hidden="true" tabindex="-1"></button>
+      </header>
+      <div class="jv-msgs" id="jvMsgs" aria-live="polite"></div>
+      <div class="jv-chips" id="jvChips"></div>
+      <form class="jv-form" id="jvForm">
+        <button class="bt-icone jv-mic" id="jvMic" type="button" aria-label="Falar com o Jarvis" title="Falar (tecla M)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+        <input id="jvTexto" type="text" autocomplete="off" maxlength="300" placeholder="Pergunte ao Jarvis…" aria-label="Mensagem para o Jarvis">
+        <button class="bt-icone jv-enviar" type="submit" aria-label="Enviar"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-7-6 16-3-6.5L4 12z"/></svg></button>
+      </form>
+    </section>
+    <button id="jvOrbe" type="button" hidden aria-hidden="true" tabindex="-1"></button>
+  </div>
+
+  <div class="aviso" id="aviso" role="status" hidden></div>
+
+  <script src="site/catalogo.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/dados.js"></script>
+  <script src="js/biblioteca.js"></script>
+  <script src="js/skills-externas.js"></script>
+  <script src="js/ferramentas.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/jarvis.js"></script>
+  <script src="js/holograma.js"></script>
+  <script>
+    /* motor 3D (Three.js): a cópia local em /vendor ou, abrindo direto do disco, a internet */
+    (async function () {
+      var CDN = 'https://cdn.jsdelivr.net/npm/three@0.170.0/', base = CDN;
+      if (location.protocol !== 'file:') {
+        try { var r = await fetch('vendor/three/build/three.module.js', { method: 'HEAD' }); if (r.ok) base = './vendor/three/'; } catch (e) { /* usa a internet */ }
+      }
+      var mapa = document.createElement('script');
+      mapa.type = 'importmap';
+      mapa.textContent = JSON.stringify({ imports: { three: base + 'build/three.module.js', 'three/addons/': base + 'examples/jsm/' } });
+      document.head.appendChild(mapa);
+      var m = document.createElement('script');
+      m.type = 'module';
+      m.textContent = "import * as THREE from 'three';" +
+        "import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';" +
+        "import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';" +
+        "import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';" +
+        "import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';" +
+        "window.Torre.Holograma.desenhar({ THREE, EffectComposer, RenderPass, UnrealBloomPass, OutputPass });";
+      m.onerror = function () { window.Torre.Holograma.desenhar(null); };
+      document.body.appendChild(m);
+      setTimeout(function () { window.Torre.Holograma.desenhar(null); }, 12000);   /* não chegou: holograma em CSS */
+    })();
+  </script>
+</body>
+</html>

@@ -109,6 +109,23 @@
     if (/(desativ|deslig|sem) (a )?voz|fique mudo|modo mudo/.test(t)) return { texto: 'Voz desligada. Continuo respondendo por texto.', voz: false, local: true };
     if (/(ativ|lig)\w* (a )?voz|pode falar|fale comigo/.test(t)) return { texto: 'Voz ligada.', voz: true, local: true };
 
+    /* ---------- calculadora: "quanto é 1490 vezes 3", "20% de 3000", "1490 - 10%" ---------- */
+    if (T.Calc) {
+      var pc = original.match(/^\s*(?:jarvis[,\s]+)?(?:quanto (?:é|e|da|dá|fica|sao|são)|calcul[ae]|faz(?: a)? conta(?: de)?|conta)\s*:?\s+(.+?)\s*\??\s*$/i);
+      var expr = pc ? pc[1] : original;
+      if (T.Calc.pareceConta(expr)) {
+        var rc = T.Calc.avaliar(expr);
+        if (!rc.erro) return { texto: 'Dá ' + rc.texto + '.', local: true };
+      }
+    }
+
+    /* ---------- lembretes ---------- */
+    if (T.Lembretes) {
+      if (/(quais|quantos|meus|mostr\w*|list\w*|ver|abr\w*)\b.*\blembretes\b|^lembretes\b/.test(t)) return { texto: null, comando: true, verLembretes: true, local: true };
+      var ml = original.match(/^\s*(?:jarvis[,\s]+)?(?:me lembr[ae]|lembre-me|me avis[ae]|avise-me|cri[ae] um lembrete|novo lembrete|lembrete)\s*(?:de|que|para|pra|:)?\s+(.+)$/i);
+      if (ml) return { texto: null, comando: true, lembrete: ml[1], local: true };
+    }
+
     /* cancelar vem antes de marcar: "desmarque" também contém "marque" */
     if (/(cancel|desmar[cq]|remov|apag|exclu)\w*\s+(a\s+|essa\s+|aquela\s+|minha\s+|uma\s+)?(ultima\s+)?(reuni|call|encontro)/.test(t)) return { texto: null, comando: true, cancelar: t };
     if (/(marc|marq|agend)\w*\s+(uma\s+|um\s+|a\s+)?(reuni|call|encontro|conversa)/.test(t)) {
@@ -212,7 +229,7 @@
     }
     if (/(que horas|horario agora|que dia e hoje|data de hoje)/.test(t)) return { texto: 'Agora são ' + F.hora(new Date()) + ' de ' + F.dataLonga(new Date()) + '.' };
     if (/(quem e voce|seu nome|o que voce e|voce e uma ia)/.test(t)) return { texto: 'Sou o Jarvis, o assistente da ' + S.nomeEmpresa() + '. Acompanho os ' + T.ANDARES.length + ' andares da torre e respondo sobre vendas, marketing, vídeos, publicações, financeiro, reuniões e estudo. Os números da operação que mostro hoje são simulados; o seu progresso de estudo é real.' };
-    if (/(ajuda|o que voce (faz|sabe|pode)|comandos|como (te )?uso)/.test(t)) return { texto: 'Posso: levar você a um andar (“abra o financeiro”), contar como estão vendas, marketing, vídeos, redes e gastos, ler o resumo do dia, marcar e cancelar reuniões (“marque uma reunião amanhã às 15h sobre a proposta”), registrar informações (“anota: cliente quer loja virtual”) e procurar agentes ou skills. Também entro em uma sala (“entre na sala de prospecção”), mostro os produtos, abro livros da biblioteca (“abra o livro de objeções”), divido o seu salário (“meu salário é de 2.000”), digo o que falta para lançar a empresa e explico as skills externas do GitHub (“o que é o Ponytail?”).' };
+    if (/(ajuda|o que voce (faz|sabe|pode)|comandos|como (te )?uso)/.test(t)) return { texto: 'Posso: levar você a um andar (“abra o financeiro”), contar como estão vendas, marketing, vídeos, redes e gastos, ler o resumo do dia, marcar e cancelar reuniões (“marque uma reunião amanhã às 15h sobre a proposta”), registrar informações (“anota: cliente quer loja virtual”) e procurar agentes ou skills. Também entro em uma sala (“entre na sala de prospecção”), mostro os produtos, abro livros da biblioteca (“abra o livro de objeções”), divido o seu salário (“meu salário é de 2.000”), digo o que falta para lançar a empresa, explico as skills externas (“o que é o Ponytail?”), faço contas (“quanto é 1490 vezes 3”) e crio lembretes (“me lembre de ligar para a Ana amanhã às 10h”).' };
     if (/^(oi|ola|e ai|eai|hey|bom dia|boa tarde|boa noite|fala)\b/.test(t)) return { texto: saudacaoHora() + '. ' + S.nomeEmpresa() + ' vendeu ' + F.int(h.vendas) + ' sites hoje, somando ' + F.brlc(h.receita) + '. Sobre o que quer saber?' };
     if (/(obrigad|valeu|show|perfeito|otimo)/.test(t)) return { texto: 'Às ordens.' };
     return { texto: null, desconhecido: true };
@@ -246,6 +263,34 @@
   function registrar(texto) {
     var r = S.registrarInfo(texto, 'Jarvis');
     return r.erro ? r.erro : 'Anotado. O Mega Brain entregou a informação a ' + r.andar.nome + '.';
+  }
+
+  /* ---------- lembretes ---------- */
+  function quandoFalado(d) {
+    var hoje = new Date(), k = F.chaveDia(d), amanha = F.chaveDia(new Date(hoje.getTime() + 86400000));
+    return (k === F.chaveDia(hoje) ? 'hoje' : k === amanha ? 'amanhã' : F.dataLonga(d)) + ' às ' + F.hora(d);
+  }
+  var FIM_DE_FRASE_TEMPO = /\s+(?:hoje|amanh[ãa]|depois de amanh[ãa]|[àa]s?\s+\d.*|ao meio[- ]dia.*|dia\s+\d.*|na\s+(?:segunda|ter[çc]a|quarta|quinta|sexta)(?:-feira)?.*|no\s+(?:s[áa]bado|domingo).*|(?:de|pela|à)\s+(?:manh[ãa]|tarde|noite).*)$/i;
+  function criarLembrete(frase) {
+    var t = limpar(frase), d, m, explicitoDia = /(hoje|amanha|dia \d|segunda|terca|quarta|quinta|sexta|sabado|domingo|\d{1,2}\/\d{1,2})/.test(t);
+    if ((m = t.match(/(?:daqui a|em|dentro de)\s+(\d+|um|uma|meia)\s*(minutos?|min|horas?|h)\b/))) {
+      var n = m[1] === 'meia' ? 0.5 : /^(um|uma)$/.test(m[1]) ? 1 : +m[1];
+      d = new Date(Date.now() + n * (/^h/.test(m[2]) ? 3600000 : 60000));
+    } else {
+      d = quando(t).inicio;
+      if (d < new Date() && !explicitoDia) d.setDate(d.getDate() + 1);   /* "às 9h" quando já passou das 9: é amanhã */
+    }
+    var texto = frase.replace(/\s*,?\s*(?:daqui a|em|dentro de)\s+(\d+|um|uma|meia)\s*(minutos?|min|horas?|h)\b/i, ' ');
+    for (var i = 0; i < 3; i++) texto = texto.replace(FIM_DE_FRASE_TEMPO, '');
+    texto = texto.replace(/^\s*(?:hoje|amanh[ãa])\s*,?\s*/i, '').replace(/[.!?,\s]+$/, '').trim() || 'Lembrete';
+    var r = T.Lembretes.criar(texto, d);
+    return r.erro ? r.erro : 'Combinado: vou lembrar você de “' + r.lembrete.texto + '” ' + quandoFalado(d) + '. O aviso aparece enquanto a torre, o dashboard ou esta página estiverem abertos.';
+  }
+  function listarLembretes() {
+    var p = T.Lembretes.pendentes();
+    if (cb.abrirLembretes) cb.abrirLembretes();
+    if (!p.length) return 'Você não tem lembretes pendentes. Diga, por exemplo: me lembre de ligar para a Ana amanhã às 10h.';
+    return 'Você tem ' + p.length + (p.length === 1 ? ' lembrete' : ' lembretes') + ': ' + p.slice(0, 5).map(function (l) { return l.texto + ', ' + quandoFalado(new Date(l.quando)); }).join('; ') + (p.length > 5 ? '; e mais ' + (p.length - 5) + '.' : '.');
   }
 
   /* ---------- produtos, salas e estudo ---------- */
@@ -292,7 +337,7 @@
     if (s) {
       var l = T.lugarDaSkill(s);
       if (cb.mostrarSkillExterna) cb.mostrarSkillExterna(s.id);
-      return s.nome + ': ' + s.resumo + ' Fica na sala ' + s.sala + (l ? ', no ' + l.andar.n + 'º andar' : '') + ', e ainda não está instalada. Atenção: ' + s.atencao.split('. ')[0].replace(/\.$/, '') + '.';
+      return s.nome + ': ' + s.resumo + ' Fica na sala ' + s.sala + (l ? ', no ' + l.andar.n + 'º andar' : '') + (s.instalado ? ', e já está instalada no disco ' + s.instalado.slice(0, 1) + '. ' : ', e ainda não está instalada. ') + 'Atenção: ' + s.atencao.split('. ')[0].replace(/\.$/, '') + '.';
     }
     if (cb.abrirSkillsExternas) cb.abrirSkillsExternas();
     /* agrupa por andar para a fala não virar uma lista de 16 nomes soltos */
@@ -300,7 +345,9 @@
       var nomes = lista.filter(function (x) { var l = T.lugarDaSkill(x); return l && l.andar.n === a.n; }).map(function (x) { return x.nome; });
       return nomes.length ? a.nome + ': ' + nomes.join(', ') : '';
     }).filter(Boolean);
-    return 'São ' + lista.length + ' skills externas, todas projetos do GitHub e nenhuma instalada. ' + porAndar.join('. ') + '. Antes de instalar qualquer uma, passe pelo SkillSpector. Abri o catálogo; diga um nome e eu mostro os detalhes.';
+    var inst = lista.filter(function (x) { return x.instalado; }).map(function (x) { return x.nome; });
+    return 'São ' + lista.length + ' skills externas, todas projetos reais de outros autores. ' +
+      (inst.length ? 'Já instaladas no seu computador: ' + inst.join(', ') + '. ' : 'Nenhuma está instalada. ') + porAndar.join('. ') + '. Antes de instalar qualquer uma, passe pelo SkillSpector. Abri o catálogo; diga um nome e eu mostro os detalhes.';
   }
   function falarDoAcervo() {
     var n = S.andarEstudo(), a = n && T.andar(n), total = (T.BIBLIOTECA || []).length;
@@ -321,6 +368,7 @@
       else if (a.tipo === 'abrir_livro' && cb.abrirLivro) cb.abrirLivro(String(a.id));
       else if (a.tipo === 'abrir_produtos' && cb.abrirProdutos) cb.abrirProdutos();
       else if (a.tipo === 'mostrar_skill_externa' && cb.mostrarSkillExterna) cb.mostrarSkillExterna(String(a.id));
+      else if (a.tipo === 'criar_lembrete' && T.Lembretes) T.Lembretes.criar(a.texto, new Date(a.quando));
     } catch (e) { console.error('[jarvis] ação falhou', a, e); }
   }
 
@@ -329,6 +377,8 @@
     if (r.ir != null && cb.irPara) cb.irPara(r.ir);
     if (r.reuniao) return marcar(r.reuniao);
     if (r.cancelar) return cancelar(r.cancelar);
+    if (r.lembrete) return criarLembrete(r.lembrete);
+    if (r.verLembretes) return listarLembretes();
     if (r.externa !== undefined) return falarDeSkillExterna(r.externa);
     if (r.produtos) return mostrarProdutos();
     if (r.salario !== undefined) return guiaSalario(r.salario);
@@ -440,7 +490,10 @@
   /* deixa o texto natural para ser lido em voz alta */
   function paraFala(t) {
     return t.replace(/R\$\s?([\d.]+(?:,\d+)?)\s?(mil|mi|bi)?/g, function (_, n, e) { return n + (e === 'mi' ? ' milhões de' : e === 'bi' ? ' bilhões de' : e ? ' mil' : '') + ' reais'; })
-      .replace(/(\d)\s?mi\b/g, '$1 milhões').replace(/[«»“”"]/g, '').replace(/×/g, ' com ').replace(/—|–/g, ', ').replace(/\s+/g, ' ');
+      .replace(/(\d)\s?mi\b/g, '$1 milhões').replace(/[«»“”"*#`]/g, '').replace(/×/g, ' com ').replace(/—|–/g, ', ')
+      /* horários: "10:00" vira "10 horas" e "10:30" vira "10 e 30" (a voz leria "dez zero zero") */
+      .replace(/\b(\d{1,2}):(\d{2})\b/g, function (_, h, m) { return (+h) + (m === '00' ? (+h === 1 ? ' hora' : ' horas') : ' e ' + (+m)); })
+      .replace(/\s+/g, ' ');
   }
   /* Separa o texto em frases. Só corta depois de pontuação seguida de espaço, para não
      partir números como "R$ 4.800". Sem `tudo`, o trecho final ainda incompleto fica em `resto`. */
@@ -455,24 +508,62 @@
   /* ger: muda a cada fala nova, para ignorar o fim das frases canceladas;
      aberta: ainda está chegando texto da IA; buf: trecho que ainda não fechou uma frase */
   var fala = { ger: 0, restam: 0, aberta: false, buf: '' };
+  /* vozServidor: a torre está com a voz brasileira do Piper ligada (Jarvis local) */
+  var vozServidor = false, filaVoz = [], tocandoVoz = false, audioAtual = null;
+  function fimDaFrase(g) { if (g === fala.ger && --fala.restam <= 0 && !fala.aberta && estado === 'falando') definirEstado('parado'); }
+  function falarNoNavegador(frase, aoTerminar) {
+    var u = new root.SpeechSynthesisUtterance(frase);
+    u.lang = 'pt-BR'; if (vozEscolhida) u.voice = vozEscolhida; u.rate = 1.06; u.pitch = 0.92;
+    u.onend = u.onerror = aoTerminar;
+    sint.speak(u);
+  }
   function enunciar(frase) {
     frase = paraFala(frase).trim();
-    if (!vozLigada || !sint || !/[0-9A-Za-zÀ-ÿ]/.test(frase)) return;
-    var g = fala.ger, u = new root.SpeechSynthesisUtterance(frase);
-    u.lang = 'pt-BR'; if (vozEscolhida) u.voice = vozEscolhida; u.rate = 1.06; u.pitch = 0.92;
-    u.onend = u.onerror = function () { if (g === fala.ger && --fala.restam <= 0 && !fala.aberta && estado === 'falando') definirEstado('parado'); };
+    if (!vozLigada || !/[0-9A-Za-zÀ-ÿ]/.test(frase)) return;
+    if (vozServidor) return enunciarServidor(frase);
+    if (!sint) return;
+    var g = fala.ger;
     fala.restam++;
     if (estado !== 'falando') definirEstado('falando');
-    sint.speak(u);
+    falarNoNavegador(frase, function () { fimDaFrase(g); });
+  }
+  /* Voz do Piper: cada frase vira um áudio pedido ao servidor assim que fica pronta;
+     os áudios tocam em ordem, um depois do outro. */
+  function enunciarServidor(frase) {
+    var item = {
+      g: fala.ger, frase: frase,
+      audio: root.fetch('/api/voz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: frase }) })
+        .then(function (r) { return r.ok ? r.blob() : null; }).catch(function () { return null; })
+    };
+    filaVoz.push(item); fala.restam++;
+    if (estado !== 'falando') definirEstado('falando');
+    if (!tocandoVoz) tocarProxima();
+  }
+  function tocarProxima() {
+    var item = filaVoz.shift();
+    if (!item) { tocandoVoz = false; return; }
+    tocandoVoz = true;
+    item.audio.then(function (blob) {
+      if (item.g !== fala.ger) return;   /* a fala foi interrompida */
+      function fim() { if (item.g !== fala.ger) return; audioAtual = null; fimDaFrase(item.g); tocarProxima(); }
+      if (!blob) { if (sint) falarNoNavegador(item.frase, fim); else fim(); return; }   /* a voz local falhou: usa a do navegador */
+      var url = root.URL.createObjectURL(blob), a = new root.Audio(url);
+      audioAtual = a;
+      a.onended = a.onerror = function () { root.URL.revokeObjectURL(url); fim(); };
+      var tocou = a.play();
+      if (tocou && tocou.catch) tocou.catch(function () { root.URL.revokeObjectURL(url); fim(); });
+    });
   }
   function pararFala() {
     fala.ger++; fala.restam = 0; fala.aberta = false; fala.buf = '';
     if (sint) sint.cancel();
+    filaVoz = []; tocandoVoz = false;
+    if (audioAtual) { try { audioAtual.pause(); } catch (e) { /* já tinha parado */ } audioAtual = null; }
     if (estado === 'falando') definirEstado('parado');
   }
   function falar(texto) {
     pararFala();
-    if (vozLigada && sint && texto) cortarFrases(texto, true).frases.forEach(enunciar);
+    if (vozLigada && (vozServidor || sint) && texto) cortarFrases(texto, true).frases.forEach(enunciar);
     if (fala.restam <= 0) definirEstado('parado');
   }
   /* fala ao vivo: as frases são ditas conforme o texto chega */
@@ -525,7 +616,7 @@
   function definirEstado(e) {
     estado = e;
     var j = $('jarvis'); if (j) j.dataset.estado = e;
-    var s = $('jvStatus'); if (s) s.textContent = { parado: ia.ativa ? 'IA conectada' : 'modo local', ouvindo: 'ouvindo…', pensando: 'pensando…', falando: 'falando…' }[e];
+    var s = $('jvStatus'); if (s) s.textContent = { parado: ia.ativa ? (ia.motor === 'local' ? 'IA no seu computador' : 'IA conectada') : 'respostas prontas', ouvindo: 'ouvindo…', pensando: 'pensando…', falando: 'falando…' }[e];
   }
   function bolha(quem, texto) {
     var box = $('jvMsgs'); if (!box) return;
@@ -568,7 +659,7 @@
     root.requestAnimationFrame(quadro);
   }
 
-  var SUGESTOES = ['Resumo do dia', 'Como dividir meu salário?', 'O que falta para lançar a empresa?', 'Mostre os produtos', 'Entre na sala de prospecção', 'Como estão as vendas?', 'Próximas reuniões'];
+  var SUGESTOES = ['Resumo do dia', 'O que eu faço hoje?', 'Meus lembretes', 'Quanto é 1490 vezes 3?', 'Mostre os produtos', 'Entre na sala de prospecção', 'Como estão as vendas?'];
 
   function montar(callbacks) {
     S = T.Sim; cb = callbacks || {};
@@ -584,11 +675,23 @@
     definirVoz(vozLigada); definirEstado('parado'); animarOrbe();
 
     /* existe servidor com IA? (só quando o site está em http/https) */
-    if (/^https?:$/.test(root.location.protocol)) {
-      root.fetch('/api/status').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
-        if (j && j.ia) { ia = { ativa: true, modelo: j.modelo }; $('jvModo').textContent = 'IA · ' + j.modelo; $('jvModo').classList.add('on'); definirEstado(estado); }
-      }).catch(function () { /* sem servidor de IA: segue no modo local */ });
-    }
+    $('jvModo').textContent = 'respostas prontas';
+    if (/^https?:$/.test(root.location.protocol)) verificarIA();
+  }
+  /* Pergunta ao servidor qual IA está ligada (Claude ou a local) e se há voz brasileira.
+     Enquanto o modelo local carrega na placa de vídeo, pergunta de novo a cada 5 segundos. */
+  function verificarIA() {
+    root.fetch('/api/status').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j) return;
+      vozServidor = !!j.voz;
+      var m = $('jvModo');
+      if (j.ia) {
+        ia = { ativa: true, modelo: j.modelo, motor: j.motor };
+        m.textContent = (j.motor === 'local' ? 'IA local · ' : 'IA · ') + String(j.modelo || '').replace(/-(?:UD-)?I?Q\d[\w]*$/i, '');
+        m.title = j.motor === 'local' ? 'Rodando no seu computador, na placa de vídeo' + (j.vozNome ? ', com a voz ' + j.vozNome : '') : 'Claude, pela internet';
+        m.classList.add('on'); definirEstado(estado);
+      } else if (j.carregando) { m.textContent = 'IA local carregando…'; setTimeout(verificarIA, 5000); }
+    }).catch(function () { /* sem servidor: segue com as respostas prontas */ });
   }
 
   T.Jarvis = {

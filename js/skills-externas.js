@@ -9,7 +9,9 @@
    Antes de instalar qualquer uma, passe a skill pelo SkillSpector (abaixo)
    e leia o código: skills rodam com as mesmas permissões que o seu agente.
 
-   Campos: id, nome, repo (dono/projeto), andar (id do andar), sala (nome do
+   Campos: id, nome, instalado (onde está no computador, só se estiver),
+   repo (dono/projeto no GitHub) ou site (endereço oficial,
+   quando o projeto não fica no GitHub), andar (id do andar), sala (nome do
    squad), chaves (como alguém chamaria a skill numa frase; usadas pelo
    Jarvis), tipo, licenca, resumo, uso (para que serve AQUI), faz (lista),
    precisa, instalar (comandos, um por linha), atencao.
@@ -71,7 +73,69 @@
       atencao: '"npx hyperframes share" publica o vídeo na internet (o plano grátis permite cinco projetos). /media-use pode enviar mídia para a HeyGen. /reverse-any-video e /style-sampling são pagos.'
     },
 
+    {
+      id: 'piper', nome: 'Piper (voz brasileira)', repo: 'OHF-Voice/piper1-gpl',
+      instalado: 'S:\\JarvisLocal\\piper (vozes jeff e cadu, licença CC0)',
+      andar: 'video', sala: 'Áudio', chaves: ['piper', 'voz brasileira', 'piper tts'],
+      tipo: 'Voz sintética local (Python)', licenca: 'GPL-3.0 (cada voz tem a sua licença)',
+      resumo: 'Transforma texto em fala no seu próprio computador, rápido e sem internet. Tem vozes em português do Brasil: cadu, edresson, faber e jeff.',
+      uso: 'Já é a voz do Jarvis (voz jeff; a cadu é a alternativa), melhor que a do navegador. Também serve para narrar vídeos e anúncios em português. Faz parte do kit "Jarvis local".',
+      faz: ['pip install piper-tts: instala o programa', 'python3 -m piper.download_voices pt_BR-jeff-medium: baixa uma voz brasileira (jeff e cadu são CC0, uso livre)', 'python3 -m piper -m pt_BR-jeff-medium -f fala.wav -- "Olá!": gera o áudio', 'Funciona sem internet depois de baixar a voz'],
+      precisa: 'Python 3. Cada voz ocupa algumas dezenas de megabytes.',
+      instalar: 'pip install piper-tts\npython3 -m piper.download_voices pt_BR-jeff-medium',
+      atencao: 'O projeto antigo (rhasspy/piper) foi arquivado em outubro de 2025; use o novo, OHF-Voice/piper1-gpl. O Piper não dá licença sobre as vozes: antes de usar uma voz em vídeo de cliente, leia o MODEL_CARD dela, porque algumas têm uso restrito.'
+    },
+
+    /* ---------------------------------------------- 7º andar · Reuniões ---------------------------------------------- */
+    {
+      id: 'whisper', nome: 'Whisper', repo: 'openai/whisper',
+      andar: 'reunioes', sala: 'Atas e Registros', chaves: ['whisper', 'whisper cpp', 'transcricao'],
+      tipo: 'Reconhecimento de fala (Python), com versão em C++ (whisper.cpp)', licenca: 'MIT',
+      resumo: 'Da OpenAI: transcreve áudio em texto em vários idiomas, inclusive português, e roda no seu computador. O whisper.cpp é a versão leve, que funciona até sem placa de vídeo.',
+      uso: 'Transcrever reuniões com clientes, áudios de WhatsApp e vídeos; é o "ouvido" do kit "Jarvis local".',
+      faz: ['whisper audio.mp3 --model turbo: transcreve um arquivo', 'Modelos do tiny (~1 GB de memória) ao large (~10 GB)', 'whisper.cpp: versão em C++ para Windows, Linux e Mac, sem dependências', 'Também identifica o idioma e traduz para o inglês'],
+      precisa: 'Python e o ffmpeg (no Windows: choco install ffmpeg). O modelo turbo pede cerca de 6 GB de memória de vídeo; sem placa de vídeo, use o whisper.cpp com um modelo menor.',
+      instalar: 'pip install -U openai-whisper\nwhisper reuniao.mp3 --model small --language pt',
+      atencao: 'Na primeira vez, baixa o modelo escolhido (de dezenas de MB a alguns GB). Transcrição de reunião envolve a voz de outras pessoas: avise os participantes antes de gravar.'
+    },
+
     /* ---------------------------------------------- 8º andar · Mega Brain ---------------------------------------------- */
+    {
+      id: 'llama-cpp', nome: 'llama.cpp', repo: 'ggml-org/llama.cpp',
+      instalado: 'S:\\JarvisLocal\\llama (versão Vulkan, usa a placa AMD)',
+      andar: 'cerebro', sala: 'Decisões Automáticas', chaves: ['llama cpp', 'llamacpp', 'llama server'],
+      tipo: 'Motor de IA local (C/C++)', licenca: 'MIT',
+      resumo: 'Roda modelos de linguagem no seu próprio computador, sem internet e sem pagar por pergunta, e oferece um servidor no mesmo formato da API da OpenAI.',
+      uso: 'O "motor" do kit "Jarvis local": com ele e o Qwen, o Jarvis já responde perguntas livres de graça, sem chave da Anthropic. A torre liga o llama-server sozinha ao abrir.',
+      faz: ['Baixa e roda um modelo direto do Hugging Face com -hf', 'llama-server: servidor local compatível com a API da OpenAI (em http://localhost:8080/v1)', 'Usa a placa de vídeo quando houver, ou só o processador', 'Lê modelos comprimidos no formato GGUF'],
+      precisa: 'Um computador com memória suficiente para o modelo: um de 8 a 9 bilhões de parâmetros comprimido pede uns 6 GB livres, de preferência em placa de vídeo.',
+      instalar: 'winget install llama.cpp\nllama-server -hf <repositório-GGUF-do-modelo>',
+      atencao: 'Modelos locais são mais fracos que o Claude e podem errar mais: revise o que eles escrevem. Rodar um modelo grande deixa o computador lento enquanto ele responde.'
+    },
+    {
+      id: 'qwen', nome: 'Qwen3.5-9B (comprimido)', repo: '', site: 'https://huggingface.co/Qwen/Qwen3.5-9B',
+      instalado: 'S:\\JarvisLocal\\modelos (arquivo Q4_K_M da unsloth, 5,3 GB)',
+      andar: 'cerebro', sala: 'Decisões Automáticas', chaves: ['qwen', 'qwen 9b', 'qwen3', 'qwen 3 5'],
+      tipo: 'Modelo de linguagem aberto (9 bilhões de parâmetros)', licenca: 'Apache-2.0',
+      resumo: 'Modelo de IA aberto da Alibaba, de fevereiro de 2026, com suporte a 201 idiomas e dialetos. Comprimido (GGUF, Q4_K_M), cabe num computador comum.',
+      uso: 'O "cérebro" do kit "Jarvis local", rodando no llama.cpp pela placa de vídeo: é quem responde o Jarvis quando não há chave do Claude, e pode escrever rascunhos de proposta, respostas a clientes e resumos, sem custo por uso.',
+      faz: ['Conversa, resume e escreve em português', 'Roda no llama.cpp a partir de um arquivo GGUF', 'A versão Q4_K_M é a mais usada: bom equilíbrio entre tamanho e qualidade', 'Licença Apache 2.0: pode ser usado em trabalho comercial'],
+      precisa: 'O llama.cpp e uns 6 GB livres de memória para a versão Q4_K_M; com placa de vídeo, responde bem mais rápido.',
+      instalar: 'O modelo oficial fica em huggingface.co/Qwen/Qwen3.5-9B.\nA Qwen não publica uma versão GGUF dele: as comprimidas são da comunidade (link "Quantizations" na página do modelo).\nAlternativa oficial já comprimida: llama-server -hf Qwen/Qwen3-8B-GGUF:Q4_K_M (5 GB)',
+      atencao: 'As versões comprimidas do 9B são feitas por terceiros: baixe de quem tiver muitos downloads e boa reputação, e nunca rode arquivos executáveis que venham junto. Como todo modelo pequeno, inventa respostas com mais frequência.'
+    },
+    {
+      id: 'xubuntu', nome: 'Xubuntu', repo: '',
+      site: 'https://xubuntu.org/download/',
+      andar: 'cerebro', sala: 'Memória Central', chaves: ['xubuntu', 'ubuntu', 'linux'],
+      tipo: 'Sistema operacional Linux, leve', licenca: 'Software livre',
+      resumo: 'Versão leve do Ubuntu, com a área de trabalho Xfce. A versão de suporte longo é a 26.04. Roda bem até em computadores mais simples.',
+      uso: 'Transformar um computador antigo num servidor da empresa: a torre, o site de vendas e o kit "Jarvis local" ligados o dia todo.',
+      faz: ['Área de trabalho leve e rápida', 'Roda llama.cpp, Whisper, Piper e o servidor da torre (Node.js)', 'Atualizações de segurança gratuitas', 'Pode ser testado num pendrive sem instalar'],
+      precisa: 'Processador de 64 bits, 2 GB de memória e 20 GB de disco (recomendado). Para o kit "Jarvis local", 16 GB de memória ou mais.',
+      instalar: '1. Baixe a imagem em xubuntu.org/download\n2. Grave num pendrive (por exemplo, com o balenaEtcher)\n3. Inicie o computador pelo pendrive e teste antes de instalar',
+      atencao: 'Instalar um sistema operacional pode APAGAR o disco. Faça backup de tudo antes e, de preferência, use um computador separado. Eu não instalo sistemas operacionais por você.'
+    },
     {
       id: 'freellmapi', nome: 'FreeLLMAPI', repo: 'tashfeenahmed/freellmapi',
       andar: 'cerebro', sala: 'Roteamento', chaves: ['freellmapi', 'free llm', 'freellm'],
@@ -215,6 +279,11 @@
 
   /* texto em minúsculas, sem acentos e com só letras e números separados por um espaço */
   function plano(s) { return (T.normalizar ? T.normalizar(s) : String(s || '').toLowerCase()).replace(/[^a-z0-9]+/g, ' ').trim(); }
+
+  /* Endereço oficial da skill: o campo "site" quando existe, senão o repositório no GitHub. */
+  T.linkDaSkill = function (s) {
+    return s.site ? { url: s.site, texto: /huggingface\.co/.test(s.site) ? 'Ver no Hugging Face' : 'Ver o site oficial' } : { url: 'https://github.com/' + s.repo, texto: 'Ver no GitHub' };
+  };
 
   T.skillExterna = function (id) {
     for (var i = 0; i < T.SKILLS_EXTERNAS.length; i++) if (T.SKILLS_EXTERNAS[i].id === id) return T.SKILLS_EXTERNAS[i];

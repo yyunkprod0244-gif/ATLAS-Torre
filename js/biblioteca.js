@@ -81,11 +81,11 @@
       resumo: 'Formalizar abre portas: nota fiscal, conta de empresa e clientes maiores. O caminho é mais simples do que parece.',
       licoes: [
         ['Por que formalizar', 'Com CNPJ você emite nota, vende para empresas, abre conta de pessoa jurídica e contribui para a previdência. Muitos clientes só contratam com nota.'],
-        ['MEI ou outro formato', 'O MEI é o caminho mais simples e barato, mas tem limite de faturamento e uma lista fechada de atividades. Confira em gov.br/mei se a sua atividade se enquadra; se não, um contador indica a opção certa.'],
+        ['MEI ou outro formato', 'O MEI é o caminho mais simples e barato, mas tem limite de R$ 81 mil por ano e uma lista fechada de ocupações. Criação de sites e web design não estão nessa lista oficial; o Sebrae ou um contador indicam o formato certo (por exemplo, uma microempresa no Simples Nacional).'],
         ['Separe as contas', 'Conta de empresa só para a empresa. Defina um valor fixo para você por mês e não misture o resto.'],
         ['Guarde para os impostos', 'Separe uma parte de cada venda para impostos e taxas antes de considerar o resto como lucro.']
       ],
-      pratica: 'Entre em gov.br/mei, pesquise a sua atividade e anote o custo mensal e o limite de faturamento em vigor.'
+      pratica: 'Marque uma conversa com o Sebrae ou com um contador e pergunte: qual formato serve para criação de sites, quanto custa abrir e quanto custa por mês.'
     },
 
     /* ------------------------------ sala 2 · Técnicas de Venda ------------------------------ */
@@ -342,10 +342,45 @@
   T.PLANO = {
     padrao: 3000,
     dias: 90,
-    custoMensal: 230,   /* imposto do MEI (cerca de R$ 80 a R$ 90) + ferramentas (cerca de R$ 150) */
+    custoMensal: 230,   /* impostos mínimos (o DAS do MEI de serviços é R$ 86,05 em 2026) + ferramentas (cerca de R$ 150); fora do MEI, some o contador */
+    /* onde fazer cada coisa: só endereços oficiais ou dos próprios serviços, conferidos em novembro de 2026 */
+    onde: [
+      { envelope: 'base', links: [
+        ['Registro.br', 'https://registro.br', 'o registro oficial dos domínios .br (cerca de R$ 40 por ano; confira o valor lá)'],
+        ['Zoho Mail, plano gratuito', 'https://www.zoho.com/mail/zohomail-pricing.html', 'e-mail com o seu domínio: até 5 contas e 5 GB, pelo navegador e pelo app'],
+        ['Google Workspace', 'https://workspace.google.com/intl/pt-BR/pricing', 'alternativa paga: R$ 40,90 por conta por mês'],
+        ['Cloudflare Pages: enviar uma pasta', 'https://developers.cloudflare.com/pages/get-started/direct-upload/', 'coloca a pasta site/ no ar arrastando os arquivos'],
+        ['Por que não a Vercel grátis', 'https://vercel.com/docs/plans/hobby', 'o plano Hobby é só para uso pessoal, não comercial'],
+        ['WhatsApp Business', 'https://whatsappbusiness.com/pt-br/products/business-app/', 'o aplicativo para atender os clientes'],
+        ['Perfil da Empresa no Google', 'https://business.google.com/br/business-profile/', 'gratuito: coloca a empresa no mapa e nas buscas']
+      ] },
+      { envelope: 'formal', links: [
+        ['Portal do Empreendedor', 'https://www.gov.br/empresas-e-negocios/pt-br/empreendedor', 'o site oficial do MEI'],
+        ['Ocupações permitidas ao MEI', 'https://www.gov.br/empresas-e-negocios/pt-br/empreendedor/quero-ser-mei/atividades-permitidas', 'a lista oficial; criação de sites não aparece nela'],
+        ['Perguntas frequentes do MEI', 'https://www.gov.br/empresas-e-negocios/pt-br/empreendedor/perguntas-frequentes', 'limite de R$ 81 mil por ano e o valor do DAS de 2026'],
+        ['Conta gov.br', 'https://www.gov.br/governodigital/pt-br/conta-gov-br', 'para abrir empresa pela internet você precisa do nível prata ou ouro'],
+        ['Sebrae', 'https://sebrae.com.br', 'orientação para escolher o formato da empresa'],
+        ['Emissor Nacional de NFS-e', 'https://www.nfse.gov.br/EmissorNacional', 'onde a nota fiscal de serviço é emitida']
+      ] },
+      { envelope: 'ferramentas', links: [
+        ['Claude', 'https://claude.com/pricing', 'plano Pro: US$ 20 por mês (US$ 17 no anual), cobrado em dólar'],
+        ['Canva', 'https://www.canva.com/pt_br/', 'design de posts, propostas e apresentações']
+      ] },
+      { envelope: 'materiais', links: [
+        ['Unsplash', 'https://unsplash.com/pt-br', 'fotos gratuitas para uso comercial; regras em unsplash.com/license'],
+        ['Pexels', 'https://www.pexels.com/pt-br/', 'fotos e vídeos gratuitos; não use como logotipo; regras em pexels.com/license'],
+        ['Google Fonts', 'https://fonts.google.com', 'fontes gratuitas para os sites']
+      ] },
+      { envelope: 'anuncios', links: [
+        ['Anúncios da Meta (Facebook e Instagram)', 'https://www.facebook.com/business/ads', 'não há orçamento mínimo; o anúncio roda por pelo menos 7 dias'],
+        ['Google Ads: orçamento', 'https://business.google.com/br/google-ads/campaign-budget/', 'você define o valor por dia e um limite por mês'],
+        ['Cursos gratuitos da Meta', 'https://www.facebook.com/business/learn', 'aprenda a anunciar antes de gastar'],
+        ['Cursos do Google (Skillshop)', 'https://skillshop.withgoogle.com', 'cursos de Google Ads']
+      ] }
+    ],
     envelopes: [
       { id: 'base', nome: 'Domínio, e-mail e site no ar', valor: 200, quando: 'Semana 1', desc: 'Domínio .com.br (cerca de R$ 40 por ano), e-mail com o domínio e o site de vendas hospedado de graça' },
-      { id: 'formal', nome: 'Formalização', valor: 300, quando: 'Semana 2', desc: 'CNPJ e os primeiros meses do imposto do MEI (cerca de R$ 80 a R$ 90 por mês; confira em gov.br/mei)' },
+      { id: 'formal', nome: 'Formalização', valor: 300, quando: 'Semana 2', desc: 'CNPJ e os primeiros impostos. Criação de sites não está na lista oficial do MEI: peça orientação ao Sebrae ou a um contador antes de abrir' },
       { id: 'ferramentas', nome: 'Ferramentas por 3 meses', valor: 450, quando: 'Meses 1 a 3', desc: 'IA, design e agenda. Cancele o que não usar no mês.' },
       { id: 'materiais', nome: 'Materiais dos projetos', valor: 250, quando: 'Quando precisar', desc: 'Fotos, fontes, plugins e imprevistos dos primeiros sites' },
       { id: 'anuncios', nome: 'Anúncios de teste', pct: 20, quando: 'A partir da semana 5', desc: 'Só com portfólio pronto: de R$ 10 a R$ 20 por dia, na oferta que mais teve resposta' },
@@ -372,7 +407,7 @@
           ['Monte 3 sites de demonstração', 'Para negócios fictícios do seu nicho, marcados como "projeto conceito". Use as skills de criação de sites para ir rápido e revise tudo.'],
           ['Crie o Perfil da Empresa no Google', 'É gratuito e coloca a empresa no mapa.'],
           ['Prepare o Instagram', 'Nove posts antes de começar a prospectar: três trabalhos, três dicas e três ofertas.'],
-          ['Formalize', 'Confira em gov.br/mei se a atividade de criação de sites cabe no MEI. Se não couber, converse com um contador antes de abrir a empresa.'],
+          ['Formalize do jeito certo', 'Na lista oficial de ocupações do MEI (Anexo XI da Resolução CGSN nº 140) não há criação de sites nem web design. Antes de abrir o CNPJ, peça orientação ao Sebrae ou a um contador sobre o formato certo e o custo mensal. Não abra MEI com outra ocupação para fazer sites: é irregular.'],
           ['Prepare proposta e contrato', 'Uma página de proposta e um contrato simples, com escopo, prazo, pagamento e o que o cliente precisa enviar.']
         ],
         meta: '3 projetos no portfólio, perfis prontos e CNPJ encaminhado.'
@@ -470,7 +505,7 @@
       ['dominio', 'Registrar o domínio', 'Endereços .com.br são registrados no Registro.br.']
     ] },
     { fase: 'Formalização', prazo: 'semanas 1 e 2', itens: [
-      ['cnpj', 'Abrir o CNPJ', 'Veja em gov.br/mei se a sua atividade cabe no MEI; se não couber, procure um contador.'],
+      ['cnpj', 'Abrir o CNPJ', 'Criação de sites não está na lista oficial do MEI: peça orientação ao Sebrae ou a um contador sobre o formato certo antes de abrir.'],
       ['conta', 'Abrir uma conta só para a empresa', 'Nada de misturar com a conta pessoal.'],
       ['nota', 'Aprender a emitir nota fiscal', 'Emita uma nota de teste no sistema da sua prefeitura ou no emissor nacional.'],
       ['contrato', 'Preparar os modelos de proposta e de contrato', 'Escopo, prazo, pagamento e o que o cliente precisa enviar.']

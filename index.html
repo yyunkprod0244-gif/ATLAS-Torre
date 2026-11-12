@@ -28,9 +28,17 @@
     <div class="placar vidro" id="placar" aria-label="Números gerais da empresa"></div>
     <div class="util vidro">
       <div class="relogio"><b id="relogioHora">--:--</b><span id="relogioData"></span></div>
-      <button class="bt" id="btProdutos" type="button" title="Todos os produtos da empresa (tecla P)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8l8-4 8 4-8 4-8-4zM4 8v8l8 4 8-4V8M12 12v8"/></svg><span>Produtos</span></button>
-      <button class="bt" id="btSkills" type="button" title="Skills externas do GitHub (tecla S)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7"/></svg><span>Skills</span></button>
-      <button class="bt" id="btResumo" type="button" title="Resumo do dia (tecla R)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5"/></svg><span>Resumo do dia</span></button>
+      <!-- páginas: dashboard, site de vendas (outra aba) e o Jarvis holográfico -->
+      <a class="bt" id="btDashboard" href="dashboard.html" title="Dashboard: seus números e os da torre (tecla D)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V13M10 20V8M16 20V11M22 20H2M20 20V4"/></svg><span>Dashboard</span></a>
+      <a class="bt" id="btSite" href="site/index.html" target="_blank" rel="noopener" title="Abrir o site de vendas em outra aba"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg><span>Site</span></a>
+      <a class="bt" id="btHolograma" href="jarvis.html" title="Jarvis holográfico em tela cheia (tecla H)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM2 12h2M20 12h2M12 2v2M12 20v2"/></svg><span>Jarvis</span></a>
+      <span class="util-sep" aria-hidden="true"></span>
+      <!-- ferramentas: só ícone; o nome aparece ao passar o mouse -->
+      <button class="bt-icone" id="btProdutos" type="button" aria-label="Produtos" title="Produtos (tecla P)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8l8-4 8 4-8 4-8-4zM4 8v8l8 4 8-4V8M12 12v8"/></svg></button>
+      <button class="bt-icone" id="btSkills" type="button" aria-label="Skills externas" title="Skills externas (tecla S)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7"/></svg></button>
+      <button class="bt-icone" id="btResumo" type="button" aria-label="Resumo do dia" title="Resumo do dia (tecla R)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5"/></svg></button>
+      <button class="bt-icone" id="btLembretes" type="button" aria-label="Lembretes" title="Lembretes (tecla L)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 17h12l-1.5-2v-4a4.5 4.5 0 0 0-9 0v4zM10 20a2 2 0 0 0 4 0"/></svg><span class="contador" id="lembretesConta" hidden></span></button>
+      <button class="bt-icone" id="btCalc" type="button" aria-label="Calculadora" title="Calculadora (tecla C)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM9 6.5h6M9 11h.01M12 11h.01M15 11h.01M9 14.5h.01M12 14.5h.01M15 14.5h.01M9 18h.01M12 18h.01M15 18h.01"/></svg></button>
       <button class="bt-icone" id="btQualidade" type="button" aria-label="Alternar qualidade dos gráficos" title="Qualidade dos gráficos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.4L20 9l-4.4 3.9L17 19l-5-3.2L7 19l1.4-6.1L4 9l5.8-.6z"/></svg></button>
       <button class="bt-icone" id="btTela" type="button" aria-label="Tela cheia" title="Tela cheia"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
     </div>
@@ -101,6 +109,7 @@
   <script src="js/dados.js"></script>
   <script src="js/biblioteca.js"></script>
   <script src="js/skills-externas.js"></script>
+  <script src="js/ferramentas.js"></script>
   <script src="js/sim.js"></script>
   <script src="js/cena.js"></script>
   <script src="js/ui.js"></script>

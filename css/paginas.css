@@ -1,0 +1,103 @@
+/* ============================================================================
+   PÁGINAS — dashboard e Jarvis holográfico
+   Usa as cores, botões e gráficos de css/torre.css e só acrescenta o layout
+   de página que rola (a torre ocupa a tela inteira e não rola).
+   ========================================================================== */
+body.pagina { overflow: auto; overflow-x: hidden; background: radial-gradient(120% 70% at 50% 0%, #0f1a33 0%, var(--plano) 60%); min-height: 100%; }
+.pg-topo { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 16px; padding: 12px max(16px, calc((100vw - 1240px) / 2)); background: rgba(5, 7, 13, .78); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid var(--linha); }
+.pg-topo .marca { display: inline-flex; align-items: center; gap: 10px; color: var(--tinta-1); text-decoration: none; padding: 0; }
+.pg-topo .marca-nome { font-size: 16px; }
+.pg-data { font-size: 12px; color: var(--tinta-3); margin-left: 8px; }
+.pg-nav { display: flex; gap: 6px; margin-left: auto; }
+.pg-corpo { max-width: 1240px; margin: 0 auto; padding: 22px 16px 40px; display: flex; flex-direction: column; gap: 34px; }
+.pg-secao { display: flex; flex-direction: column; gap: 14px; }
+.pg-cab { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; }
+.pg-cab h1, .pg-cab h2 { font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+.tag-real { background: color-mix(in srgb, var(--bom) 22%, var(--sup-2)); color: var(--tinta-1); }
+.dash-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.cartao { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; border-radius: 14px; }
+.cartao.largo { grid-column: span 2; }
+.cartao .b-tit { margin-bottom: 0; }
+.cartao .bt-mini { text-decoration: none; }
+.dash-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.vazio-grande { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 6px 0; }
+.vazio-grande p { font-size: 16px; font-weight: 500; }
+.vazio-grande small { color: var(--tinta-3); }
+/* plano de 90 dias */
+.plano-heroi { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; }
+.plano-obj { font-size: 13px; color: var(--tinta-2); line-height: 1.55; }
+.plano-obj b { color: var(--tinta-1); font-weight: 600; }
+.segmentos { display: flex; gap: 3px; height: 12px; }
+.segmentos .seg { position: relative; border-radius: 3px; background: color-mix(in srgb, var(--gelo) 16%, var(--sup-2)); overflow: hidden; }
+.segmentos .seg i { position: absolute; inset: 0 auto 0 0; background: var(--gelo); border-radius: 3px; }
+.segmentos .seg.atual { box-shadow: 0 0 0 1px var(--gelo); }
+.seg-rotulos { display: flex; gap: 3px; font-size: 10.5px; color: var(--tinta-3); }
+.seg-rotulos span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.seg-rotulos .atual { color: var(--tinta-1); font-weight: 600; }
+/* listas */
+.fases-lista { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.fases-lista li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--grade); }
+.fases-lista li:last-child { border-bottom: 0; }
+.fases-lista b { font: 500 12px var(--mono); color: var(--tinta-2); }
+.fases-lista .ok { font-style: normal; color: var(--bom); margin-right: 6px; }
+.lembretes-mini { display: flex; flex-direction: column; gap: 6px; }
+.lembretes-mini .lembrete { display: flex; align-items: center; gap: 8px; background: var(--sup-1); border: 1px solid var(--linha); border-radius: 10px; padding: 7px 6px 7px 10px; font-size: 12.5px; }
+.lembretes-mini .lembrete.atrasado { border-color: color-mix(in srgb, var(--critico) 60%, transparent); }
+.lembretes-mini .lembrete div { flex: 1; min-width: 0; }
+.lembretes-mini time { font: 400 10.5px var(--mono); color: var(--tinta-3); }
+.lembretes-mini .selo { margin-left: 6px; }
+.medidores.duas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 22px; }
+.barras.dinheiro .br-linha, .cartao .barras.com-extra .br-linha { grid-template-columns: minmax(96px, 38%) 1fr; }
+@media (max-width: 1000px) { .dash-grade { grid-template-columns: 1fr 1fr; } .dash-kpis { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 680px) {
+  .dash-grade { grid-template-columns: 1fr; } .cartao.largo { grid-column: auto; }
+  .pg-data, .pg-nav .bt span { display: none; }
+  .plano-heroi { grid-template-columns: 1fr; gap: 8px; }
+  .medidores.duas { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================================
+   JARVIS HOLOGRÁFICO
+   ======================================================================== */
+body.holo { overflow: hidden; height: 100%; background: radial-gradient(70% 60% at 50% 46%, #0b2a3a 0%, #04121c 38%, #010409 75%); }
+.holo-palco { position: fixed; inset: 0; }
+#holoCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* linhas de varredura e leve oscilação, para parecer projeção */
+.holo-palco::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(127, 228, 255, .045) 0 1px, transparent 1px 3px); mix-blend-mode: screen; animation: holoTreme 6s steps(60) infinite; }
+@keyframes holoTreme { 0%, 100% { opacity: .9; } 48% { opacity: .75; } 50% { opacity: 1; } 52% { opacity: .8; } }
+.holo-reserva { position: absolute; left: 50%; top: 45%; width: min(46vmin, 360px); aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; border: 2px solid rgba(127, 228, 255, .7); box-shadow: 0 0 60px rgba(127, 228, 255, .5), inset 0 0 60px rgba(127, 228, 255, .35); animation: holoGira 9s linear infinite; }
+.holo-reserva::before, .holo-reserva::after { content: ""; position: absolute; inset: 14%; border-radius: 50%; border: 1px dashed rgba(127, 228, 255, .6); }
+.holo-reserva::after { inset: 34%; border-style: solid; background: radial-gradient(circle, rgba(200, 245, 255, .9), rgba(127, 228, 255, .1) 70%); }
+@keyframes holoGira { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.holo-topo { position: fixed; z-index: 5; top: 16px; left: 16px; right: 16px; display: flex; align-items: center; gap: 12px; pointer-events: none; }
+.holo-topo > * { pointer-events: auto; }
+.holo-titulo { display: flex; flex-direction: column; line-height: 1.1; color: #cfefff; }
+.holo-titulo b { font: 600 22px var(--fonte); letter-spacing: .32em; }
+.holo-titulo span { font: 500 10.5px var(--mono); letter-spacing: .22em; text-transform: uppercase; color: #6fb6d0; margin-top: 4px; }
+.holo-topo nav { margin-left: auto; display: flex; gap: 6px; }
+.holo-topo .bt { text-decoration: none; }
+.holo-hud { position: fixed; z-index: 4; left: 16px; top: 50%; transform: translateY(-50%); width: 230px; display: flex; flex-direction: column; gap: 8px; }
+.hud-item { border: 1px solid rgba(127, 228, 255, .22); background: rgba(4, 18, 28, .55); border-radius: 12px; padding: 10px 12px; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.hud-item small { display: block; font: 500 9.5px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: #6fb6d0; margin-bottom: 3px; }
+.hud-item b { font-size: 15px; font-weight: 600; color: #e6f8ff; }
+.hud-item p { font-size: 12px; color: #a7cfdc; line-height: 1.4; }
+.holo-estado { position: fixed; z-index: 4; left: calc(50% - 75px); bottom: calc(16px + 74px); transform: translateX(-50%); font: 500 11.5px var(--mono); letter-spacing: .26em; text-transform: uppercase; color: #dff7ff; background: rgba(1, 6, 12, .72); border: 1px solid rgba(127, 228, 255, .3); padding: 6px 14px; border-radius: 999px; white-space: nowrap; }
+.holo-falar { left: calc(50% - 75px) !important; }
+.holo-falar { position: fixed; z-index: 4; left: 50%; bottom: 20px; transform: translateX(-50%); width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; color: #e6f8ff; border: 1px solid rgba(127, 228, 255, .6); background: rgba(4, 30, 44, .7); box-shadow: 0 0 30px rgba(127, 228, 255, .35); }
+.holo-falar .ico { width: 24px; height: 24px; }
+.holo-falar.on { background: #e6f8ff; color: #04121c; box-shadow: 0 0 0 8px rgba(127, 228, 255, .18), 0 0 50px rgba(127, 228, 255, .8); }
+/* conversa: o mesmo painel do Jarvis, à direita, em tom holográfico */
+body.holo .jarvis { position: fixed; z-index: 6; right: 16px; left: auto; top: 76px; bottom: 16px; opacity: 1; pointer-events: auto; display: block; }
+body.holo .jv-painel { width: 380px; height: 100%; max-height: none; border-color: rgba(127, 228, 255, .25); background: linear-gradient(180deg, rgba(4, 24, 36, .82), rgba(2, 10, 18, .88)); }
+body.holo .jv-msg.de-jarvis { background: rgba(127, 228, 255, .08); border-color: rgba(127, 228, 255, .22); }
+body.holo .jv-msg.ir-torre { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: #9fe6ff; text-decoration: none; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(127, 228, 255, .4); background: transparent; }
+body.holo .jv-msg.ir-torre:hover { background: rgba(127, 228, 255, .12); }
+@media (max-width: 980px) {
+  .holo-hud { display: none; }
+  body.holo .jarvis { top: auto; left: 10px; right: 10px; bottom: 96px; height: 42vh; }
+  body.holo .jv-painel { width: 100%; }
+  .holo-estado { display: none; }   /* no celular, o estado aparece no topo da conversa */
+  .holo-falar { left: 50% !important; }
+  .holo-topo nav .bt span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .holo-palco::after, .holo-reserva { animation: none; } }

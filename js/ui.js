@@ -148,7 +148,7 @@
             '<p class="sala-txt">Mobília montada sozinha: ' + F.int(inv.estacoes) + ' estações de trabalho (mesa, computador e cadeira)' + inv.itens.map(function (x) { return ', ' + x.texto; }).join('') + '.</p>' +
             (function () {
               var ext = T.skillsExternasDe ? T.skillsExternasDe(n, salaAberta) : [];
-              return ext.length ? '<p class="sala-txt">Skill externa desta sala: ' + ext.map(function (s) { return '<a href="#ext-' + esc(s.id) + '" data-ext="' + esc(s.id) + '">' + esc(s.nome) + '</a>'; }).join(', ') + ' (não instalada).</p>' : '';
+              return ext.length ? '<p class="sala-txt">Skill externa desta sala: ' + ext.map(function (s) { return '<a href="#ext-' + esc(s.id) + '" data-ext="' + esc(s.id) + '">' + esc(s.nome) + '</a>' + (s.instalado ? ' (instalada)' : ' (não instalada)'); }).join(', ') + '.</p>' : '';
             })() +
             '<p class="b-nota">Arraste para girar, use a roda do mouse para aproximar e clique em um agente para abrir a ficha.</p>' +
             '<div class="sala-acoes"><button class="bt bt-cor bt-mini" type="button" data-acao="agentesDaSala">Ver agentes da sala</button><button class="bt bt-mini" type="button" data-acao="fecharSala">' + ico(ICO.voltar) + 'Voltar para o andar</button></div></div>';
@@ -167,7 +167,7 @@
           var daSala = lista.filter(function (s) { return T.lugarDaSkill(s).k === k; });
           if (daSala.length) grupos.push('<h4 class="ag-grupo"><button class="ex-sala" type="button" data-sala="' + k + '">Sala ' + esc(q.nome) + '</button></h4>' + daSala.map(function (s) { return cartaoExterna(s); }).join(''));
         });
-        return '<h3 class="b-tit">Skills externas <small>' + lista.length + ' ' + (lista.length === 1 ? 'projeto' : 'projetos') + ' do GitHub ligados a este andar</small></h3><div class="externas">' + grupos.join('') + '</div>' +
+        return '<h3 class="b-tit">Skills externas <small>' + lista.length + ' ' + (lista.length === 1 ? 'projeto' : 'projetos') + ' ligados a este andar</small></h3><div class="externas">' + grupos.join('') + '</div>' +
           '<p class="b-nota">Antes de instalar qualquer skill, passe-a pelo SkillSpector e leia o código: ela roda com as mesmas permissões do seu agente.</p>';
       }
     },
@@ -622,6 +622,12 @@
         '<button class="bt bt-mini" type="button" data-acao="reiniciarPlano">Zerar a contagem</button>'
         : '<button class="bt bt-cor" type="button" data-acao="iniciarPlano">Começar o plano hoje</button><small>a torre conta os dias e mostra a fase em que você está</small>') + '</div></form>' +
       '<div id="planoDivisao">' + divisaoPlanoHTML(pl) + '</div>' +
+      (P.onde ? '<h4 class="b-tit">Onde fazer cada coisa <small>sites oficiais, conferidos em novembro de 2026</small></h4><div class="onde">' + P.onde.map(function (g) {
+        var env = P.envelopes.filter(function (e) { return e.id === g.envelope; })[0];
+        return '<section><h5>' + esc(env ? env.nome : g.envelope) + '</h5><ul>' + g.links.map(function (l) {
+          return '<li><a href="' + esc(l[1]) + '" target="_blank" rel="noopener noreferrer">' + esc(l[0]) + ico(ICO.externo) + '</a><span>' + esc(l[2]) + '</span></li>';
+        }).join('') + '</ul></section>';
+      }).join('') + '</div>' : '') +
       '<h4 class="b-tit">Os 90 dias, fase por fase</h4>';
     P.fases.forEach(function (f, i) {
       var gasta = f.gasta.map(function (id) { var l = pl.divisao.linhas.filter(function (x) { return x.id === id; })[0]; return l && l.valor ? l.nome.toLowerCase() + ' (' + F.brl(l.valor) + ')' : ''; }).filter(Boolean);
@@ -693,14 +699,15 @@
   function cartaoExterna(s, o) {
     o = o || {};
     var l = T.lugarDaSkill(s);
-    return '<article class="externa"' + (o.catalogo ? ' style="--cor:' + (l ? l.andar.cor : 'var(--gelo)') + '"' : ' id="ext-' + esc(s.id) + '"') + '><div class="ex-topo"><b>' + esc(s.nome) + '</b><span class="tag">não instalada</span></div>' +
+    return '<article class="externa"' + (o.catalogo ? ' style="--cor:' + (l ? l.andar.cor : 'var(--gelo)') + '"' : ' id="ext-' + esc(s.id) + '"') + '><div class="ex-topo"><b>' + esc(s.nome) + '</b><span class="tag' + (s.instalado ? ' tag-instalada' : '') + '">' + (s.instalado ? '✓ instalada' : 'não instalada') + '</span></div>' +
+      (s.instalado ? '<p class="ex-local">Instalada em <code>' + esc(s.instalado.split(' (')[0]) + '</code>' + esc(s.instalado.slice(s.instalado.split(' (')[0].length)) + '</p>' : '') +
       '<p class="ex-tipo">' + esc(s.tipo) + ' · ' + esc(s.licenca) + '</p>' +
       '<p class="ex-resumo">' + esc(s.resumo) + '</p><p class="ex-uso"><b>Aqui serve para:</b> ' + esc(s.uso) + '</p>' +
       '<details class="ex-mais"><summary>O que faz, como instalar e cuidados</summary>' +
       '<ul class="ex-faz">' + s.faz.map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ul>' +
       '<h4>Precisa de</h4><p>' + esc(s.precisa) + '</p><h4>Como instalar</h4><pre class="ex-cmd">' + esc(s.instalar) + '</pre>' +
       '<p class="alerta aviso"><i aria-hidden="true">▲</i><span><b>Atenção:</b> ' + esc(s.atencao) + '</span></p></details>' +
-      '<div class="ex-acoes"><a class="bt bt-mini" href="https://github.com/' + esc(s.repo) + '" target="_blank" rel="noopener noreferrer">' + ico(ICO.externo) + 'Ver no GitHub</a>' +
+      '<div class="ex-acoes"><a class="bt bt-mini" href="' + esc(T.linkDaSkill(s).url) + '" target="_blank" rel="noopener noreferrer">' + ico(ICO.externo) + esc(T.linkDaSkill(s).texto) + '</a>' +
       (o.catalogo && l ? '<button class="bt bt-mini" type="button" data-ext="' + esc(s.id) + '">' + ico(ICO.alvo) + 'Ver na torre</button>' : '') + '</div></article>';
   }
 
@@ -714,7 +721,7 @@
         doAndar.map(function (s) { return '<div class="ex-celula"><p class="ex-onde">Sala ' + esc(s.sala) + '</p>' + cartaoExterna(s, { catalogo: true }) + '</div>'; }).join('') + '</div></section>';
     });
     m.innerHTML = '<div class="modal-fundo" data-acao="fecharModal"></div><div class="modal-caixa modal-skills vidro" role="dialog" aria-modal="true" aria-labelledby="mTit"><header><div><h2 id="mTit">Skills externas</h2>' +
-      '<p>' + lista.length + ' projetos do GitHub catalogados nos andares e salas da torre · nenhum instalado · a lista fica em js/skills-externas.js</p></div><button class="bt-icone" type="button" data-acao="fecharModal" aria-label="Fechar skills externas">' + ico(ICO.fechar) + '</button></header>' +
+      '<p>' + lista.length + ' projetos reais catalogados nos andares e salas da torre · ' + lista.filter(function (s) { return s.instalado; }).length + ' instalados no seu computador · a lista fica em js/skills-externas.js</p></div><button class="bt-icone" type="button" data-acao="fecharModal" aria-label="Fechar skills externas">' + ico(ICO.fechar) + '</button></header>' +
       '<div class="modal-corpo"><p class="alerta aviso"><i aria-hidden="true">▲</i><span>Skills rodam com as mesmas permissões do seu agente. Antes de instalar, passe cada uma pelo <b>SkillSpector</b> (8º andar) e leia o código.</span></p>' + html +
       (ign.length ? '<section class="ex-andar"><h3>Não catalogadas</h3><ul class="ex-ignoradas">' + ign.map(function (x) { return '<li><b>' + esc(x.repo) + '</b> · ' + esc(x.motivo) + '</li>'; }).join('') + '</ul></section>' : '') + '</div></div>';
     focoAntes = document.activeElement; m.hidden = false;
@@ -734,6 +741,103 @@
       el.classList.add('piscar'); setTimeout(function () { el.classList.remove('piscar'); }, 1600);
     }
     return true;
+  }
+
+  /* ==========================================================================
+     LEMBRETES E CALCULADORA (js/ferramentas.js)
+     ======================================================================== */
+  var modalAtual = null, calcHist = [];
+  function quandoTexto(d) {
+    var hoje = new Date(), amanha = new Date(hoje.getTime() + 86400000), k = F.chaveDia(d);
+    return (k === F.chaveDia(hoje) ? 'hoje' : k === F.chaveDia(amanha) ? 'amanhã' : F.dataMedia(d)) + ' às ' + F.hora(d);
+  }
+  function lembretesHTML() {
+    var agora = new Date(), pend = T.Lembretes.pendentes(), feitos = T.Lembretes.listar().filter(function (x) { return x.feito; }).slice(-5).reverse();
+    function item(l) {
+      var d = new Date(l.quando), atras = !l.feito && d <= agora;
+      return '<li class="lembrete' + (atras ? ' atrasado' : '') + (l.feito ? ' feito' : '') + '"><div><p>' + esc(l.texto) + '</p><time>' + esc(quandoTexto(d)) + '</time>' +
+        (atras ? '<span class="selo critico"><i aria-hidden="true">✕</i>atrasado</span>' : '') + '</div>' +
+        (l.feito ? '' : '<button class="bt-icone" type="button" data-lembrete-ok="' + esc(l.id) + '" aria-label="Concluir: ' + esc(l.texto) + '" title="Concluir">' + ico(ICO.certo) + '</button>') +
+        '<button class="bt-icone" type="button" data-lembrete-x="' + esc(l.id) + '" aria-label="Apagar: ' + esc(l.texto) + '" title="Apagar">' + ico(ICO.fechar) + '</button></li>';
+    }
+    return (pend.length ? '<h4 class="ag-grupo">Pendentes · ' + pend.length + '</h4><ul>' + pend.map(item).join('') + '</ul>' : '<p class="vazio">Nenhum lembrete pendente. Crie um acima ou peça ao Jarvis: “me lembre de ligar para a Ana amanhã às 10h”.</p>') +
+      (feitos.length ? '<h4 class="ag-grupo">Concluídos</h4><ul>' + feitos.map(item).join('') + '</ul>' : '');
+  }
+  function atualizarContadorLembretes() {
+    var el = $('lembretesConta'); if (!el || !T.Lembretes) return;
+    var agora = new Date(), fimDoDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + 1), pend = T.Lembretes.pendentes();
+    var deHoje = pend.filter(function (x) { return new Date(x.quando) < fimDoDia; }), atras = pend.filter(function (x) { return new Date(x.quando) <= agora; });
+    el.hidden = !deHoje.length; el.textContent = deHoje.length; el.classList.toggle('atrasado', atras.length > 0);
+    var bt = $('btLembretes'); if (bt) bt.setAttribute('aria-label', 'Lembretes' + (deHoje.length ? ': ' + deHoje.length + ' para hoje' + (atras.length ? ', ' + atras.length + ' atrasado' + (atras.length > 1 ? 's' : '') : '') : ''));
+  }
+  function abrirModal(html, tipo, larguraCls) {
+    var m = $('modal');
+    m.innerHTML = '<div class="modal-fundo" data-acao="fecharModal"></div><div class="modal-caixa ' + (larguraCls || 'modal-ferramenta') + ' vidro" role="dialog" aria-modal="true" aria-labelledby="mTit">' + html + '</div>';
+    focoAntes = document.activeElement; m.hidden = false; modalAtual = tipo;
+  }
+  function abrirLembretes() {
+    var d = new Date(Date.now() + 3600000); d.setMinutes(0, 0, 0);
+    var notif = 'Notification' in root && root.Notification.permission === 'default';
+    abrirModal('<header><div><h2 id="mTit">Lembretes</h2><p>Ficam salvos neste navegador e tocam enquanto a torre, o dashboard ou o Jarvis estiverem abertos em alguma aba.</p></div><button class="bt-icone" type="button" data-acao="fecharModal" aria-label="Fechar lembretes">' + ico(ICO.fechar) + '</button></header>' +
+      '<div class="modal-corpo"><form class="form-lembrete" id="formLembrete" autocomplete="off"><label class="inteiro">O que devo lembrar<input name="texto" maxlength="160" required placeholder="Ex.: Ligar para a Clínica Bela Vista"></label>' +
+      '<label>Dia<input type="date" name="dia" required value="' + F.chaveDia(d) + '"></label><label>Hora<input type="time" name="hora" required value="' + F.hora(d) + '"></label><button class="bt bt-cor" type="submit">Criar</button></form>' +
+      '<div class="atalhos"><button class="chip-bt" type="button" data-atalho="30">Em 30 minutos</button><button class="chip-bt" type="button" data-atalho="60">Em 1 hora</button><button class="chip-bt" type="button" data-atalho="amanha">Amanhã às 9h</button><button class="chip-bt" type="button" data-atalho="sexta">Sexta às 17h</button></div>' +
+      (notif ? '<p class="b-nota"><button class="bt bt-mini" type="button" data-acao="permitirNotif">Avisar também com a aba em segundo plano</button></p>' : '') +
+      '<div class="lembretes" id="listaLembretes">' + lembretesHTML() + '</div></div>', 'lembretes');
+    $('modal').querySelector('input[name=texto]').focus();
+  }
+  function atalhoLembrete(tipo) {
+    var f = $('formLembrete'); if (!f) return;
+    var d = new Date();
+    if (tipo === 'amanha') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+    else if (tipo === 'sexta') { d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || (d.getHours() >= 17 ? 7 : 0))); d.setHours(17, 0, 0, 0); }
+    else d = new Date(Date.now() + (+tipo) * 60000);
+    f.dia.value = F.chaveDia(d); f.hora.value = F.hora(d);
+    f.texto.focus();
+  }
+
+  var TECLAS = [['C', 'limpar'], ['⌫', 'apagar'], ['(', '('], [')', ')'], ['7'], ['8'], ['9'], ['÷', ' ÷ ', 'op'], ['4'], ['5'], ['6'], ['×', ' × ', 'op'], ['1'], ['2'], ['3'], ['−', ' - ', 'op'], ['0'], [',', ','], ['%', '%', 'op'], ['+', ' + ', 'op']];
+  function abrirCalculadora() {
+    calcHist = S.guarda.ler('torre.calc', []) || [];
+    abrirModal('<header><div><h2 id="mTit">Calculadora</h2><p>Digite a conta ou use as teclas. Entende “1.490,50”, “1490 x 3”, “20% de 3000” e “1490 - 10%”.</p></div><button class="bt-icone" type="button" data-acao="fecharModal" aria-label="Fechar calculadora">' + ico(ICO.fechar) + '</button></header>' +
+      '<div class="modal-corpo"><div class="calc"><div class="calc-visor"><input id="calcConta" type="text" inputmode="decimal" autocomplete="off" aria-label="Conta" placeholder="Ex.: 1490 x 3 - 10%"><output id="calcResultado" for="calcConta" aria-live="polite">0</output></div>' +
+      '<div class="calc-teclas">' + TECLAS.map(function (t) { return '<button type="button" data-tecla="' + esc(t[1] || t[0]) + '"' + (t[2] ? ' class="' + t[2] + '"' : '') + '>' + esc(t[0]) + '</button>'; }).join('') +
+      '<button type="button" class="igual" data-tecla="=" style="grid-column:1/-1">=</button></div>' +
+      '<div class="calc-lado"><h4>Desconto</h4><form class="calc-rapida" id="calcDesconto"><label>Preço (R$)<input type="number" name="a" min="0" value="1490"></label><label>Desconto (%)<input type="number" name="b" min="0" max="100" value="30"></label><output></output></form>' +
+      '<h4>Entrada do projeto</h4><form class="calc-rapida" id="calcEntrada"><label>Valor (R$)<input type="number" name="a" min="0" value="2900"></label><label>Entrada (%)<input type="number" name="b" min="0" max="100" value="50"></label><output></output></form>' +
+      '<h4>Últimas contas</h4><div class="calc-hist" id="calcHist"></div></div></div></div>', 'calc', 'modal-ferramenta modal-calc');
+    contasRapidas(); desenharHist();
+    $('calcConta').focus();
+  }
+  function calcular(final) {
+    var inp = $('calcConta'), out = $('calcResultado'); if (!inp) return;
+    var conta = inp.value.trim();
+    if (!conta) { out.textContent = '0'; out.classList.remove('erro'); return; }
+    var r = T.Calc.avaliar(conta);
+    if (r.erro) { if (final) { out.textContent = r.erro; out.classList.add('erro'); } return; }
+    out.textContent = r.texto; out.classList.remove('erro');
+    if (final) {
+      calcHist = [{ conta: conta, texto: r.texto }].concat(calcHist.filter(function (h) { return h.conta !== conta; })).slice(0, 8);
+      S.guarda.gravar('torre.calc', calcHist); desenharHist();
+      inp.value = String(r.valor).replace('.', ',');
+    }
+  }
+  function tecla(t) {
+    var inp = $('calcConta'); if (!inp) return;
+    if (t === 'limpar') inp.value = '';
+    else if (t === 'apagar') inp.value = inp.value.replace(/\s*\S\s*$/, '');
+    else if (t === '=') return calcular(true);
+    else inp.value += t;
+    calcular(false); inp.focus();
+  }
+  function desenharHist() {
+    var el = $('calcHist'); if (!el) return;
+    el.innerHTML = calcHist.length ? calcHist.map(function (h) { return '<button type="button" data-hist="' + esc(h.conta) + '">' + esc(h.conta) + ' = <b>' + esc(h.texto) + '</b></button>'; }).join('') : '<p class="vazio">As contas que você fizer aparecem aqui.</p>';
+  }
+  function contasRapidas() {
+    var d = $('calcDesconto'), e = $('calcEntrada');
+    if (d) { var p = +d.a.value || 0, pc = Math.min(100, +d.b.value || 0); d.querySelector('output').textContent = 'Fica ' + F.brl2(p * (1 - pc / 100)) + ' (desconto de ' + F.brl2(p * pc / 100) + ')'; }
+    if (e) { var v = +e.a.value || 0, ep = Math.min(100, +e.b.value || 0); e.querySelector('output').textContent = 'Entrada de ' + F.brl2(v * ep / 100) + ' e ' + F.brl2(v - v * ep / 100) + ' na entrega'; }
   }
 
   /* ==========================================================================
@@ -801,7 +905,7 @@
     focoAntes = document.activeElement; m.hidden = false;
     m.querySelector('header .bt-icone').focus();
   }
-  function fecharModal() { var m = $('modal'); if (m.hidden) return false; m.hidden = true; m.innerHTML = ''; if (focoAntes && focoAntes.focus) focoAntes.focus(); return true; }
+  function fecharModal() { var m = $('modal'); if (m.hidden) return false; m.hidden = true; m.innerHTML = ''; modalAtual = null; if (focoAntes && focoAntes.focus) focoAntes.focus(); return true; }
 
   /* ==========================================================================
      FEED AO VIVO (rodapé)
@@ -851,8 +955,13 @@
 
     /* cliques (delegados) */
     document.addEventListener('click', function (e) {
-      var t = e.target.closest('[data-n],[data-aba],[data-agente],[data-sala],[data-livro],[data-ext],[data-acao],[data-ir],[data-remover]');
+      var t = e.target.closest('[data-n],[data-aba],[data-agente],[data-sala],[data-livro],[data-ext],[data-acao],[data-ir],[data-remover],[data-lembrete-ok],[data-lembrete-x],[data-atalho],[data-tecla],[data-hist]');
       if (!t) return;
+      if (t.dataset.lembreteOk) { T.Lembretes.concluir(t.dataset.lembreteOk); return aviso('Lembrete concluído.'); }
+      if (t.dataset.lembreteX) { T.Lembretes.remover(t.dataset.lembreteX); return aviso('Lembrete apagado.'); }
+      if (t.dataset.atalho) return atalhoLembrete(t.dataset.atalho);
+      if (t.dataset.tecla) return tecla(t.dataset.tecla);
+      if (t.dataset.hist) { $('calcConta').value = t.dataset.hist; calcular(false); return $('calcConta').focus(); }
       if (t.dataset.n != null && t.closest('#elevador')) return +t.dataset.n ? abrirAndar(+t.dataset.n) : fechar();
       if (t.dataset.aba) return definirAba(t.dataset.aba);
       if (t.dataset.agente != null) return abrirAgente(andarAberto, +t.dataset.agente);
@@ -881,6 +990,9 @@
           return aviso(t.dataset.acao === 'iniciarPlano' ? 'Plano iniciado: hoje é o dia 1 de 90.' : 'Contagem zerada. Comece de novo quando quiser.');
         case 'produtos': return abrirProdutos();
         case 'skillsExternas': return abrirSkillsExternas();
+        case 'permitirNotif':
+          if ('Notification' in root) root.Notification.requestPermission().then(function (p) { aviso(p === 'granted' ? 'Pronto: os lembretes também aparecem como notificação.' : 'Sem permissão: os lembretes aparecem só na tela.'); var b = t.closest('p'); if (b) b.remove(); });
+          return;
         case 'irVendas': fecharModal(); return abrirAndar(2);
         case 'resumo': return abrirResumo();
         case 'fecharModal': return fecharModal();
@@ -898,6 +1010,8 @@
     /* guia do salário: a divisão é refeita enquanto você digita */
     document.addEventListener('input', function (e) {
       var f = e.target.form, el;
+      if (e.target.id === 'calcConta') return calcular(false);
+      if (f && (f.id === 'calcDesconto' || f.id === 'calcEntrada')) return contasRapidas();
       if (f && f.id === 'formPlano' && e.target.name === 'capital') {
         if (e.target.value !== '' && +e.target.value >= 0 && (el = $('planoDivisao'))) el.innerHTML = divisaoPlanoHTML(S.definirCapital(e.target.value));
         return;
@@ -922,7 +1036,14 @@
 
     /* formulários */
     document.addEventListener('submit', function (e) {
-      if (e.target.id === 'formSalario' || e.target.id === 'formPlano' || e.target.id === 'formNumeros') e.preventDefault();
+      if (e.target.id === 'formSalario' || e.target.id === 'formPlano' || e.target.id === 'formNumeros' || e.target.id === 'calcDesconto' || e.target.id === 'calcEntrada') e.preventDefault();
+      if (e.target.id === 'formLembrete') {
+        e.preventDefault();
+        var fl = e.target, r = T.Lembretes.criar(fl.texto.value, new Date(fl.dia.value + 'T' + fl.hora.value));
+        if (r.erro) return aviso(r.erro);
+        fl.texto.value = ''; fl.texto.focus();
+        return aviso('Lembrete criado para ' + quandoTexto(new Date(r.lembrete.quando)) + '.');
+      }
       if (e.target.id === 'formInfo') {
         e.preventDefault();
         var r = S.registrarInfo(e.target.texto.value);
@@ -962,6 +1083,14 @@
     $('btResumo').addEventListener('click', abrirResumo);
     if ($('btProdutos')) $('btProdutos').addEventListener('click', abrirProdutos);
     if ($('btSkills')) $('btSkills').addEventListener('click', abrirSkillsExternas);
+    if ($('btLembretes')) $('btLembretes').addEventListener('click', abrirLembretes);
+    if ($('btCalc')) $('btCalc').addEventListener('click', abrirCalculadora);
+    /* Enter na calculadora fecha a conta */
+    document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.id === 'calcConta') { e.preventDefault(); calcular(true); } });
+    if (T.Lembretes) {
+      T.Lembretes.aoMudar(function () { atualizarContadorLembretes(); var l = $('listaLembretes'); if (l && modalAtual === 'lembretes') l.innerHTML = lembretesHTML(); });
+      atualizarContadorLembretes(); setInterval(atualizarContadorLembretes, 30000);
+    }
     $('btQualidade').addEventListener('click', function () {
       var q = cena.qualidadeAtual && cena.qualidadeAtual() === 'alta' ? 'leve' : 'alta';
       cena.qualidade(q); S.guarda.gravar('torre.qualidade', q);
@@ -1002,7 +1131,7 @@
 
   T.UI = {
     montar: montar, abrirAndar: abrirAndar, fechar: fechar, definirAba: definirAba, abrirAgente: abrirAgente, fecharFicha: fecharFicha,
-    abrirSala: abrirSala, fecharSala: fecharSala, abrirLivro: abrirLivro, abrirProdutos: abrirProdutos, abrirSkillsExternas: abrirSkillsExternas, mostrarSkillExterna: mostrarSkillExterna,
+    abrirSala: abrirSala, fecharSala: fecharSala, abrirLivro: abrirLivro, abrirProdutos: abrirProdutos, abrirSkillsExternas: abrirSkillsExternas, abrirLembretes: abrirLembretes, abrirCalculadora: abrirCalculadora, quandoTexto: quandoTexto, mostrarSkillExterna: mostrarSkillExterna,
     abrirResumo: abrirResumo, fecharModal: fecharModal, aviso: aviso, dicaCena: dicaCena,
     andarAberto: function () { return andarAberto; }, salaAberta: function () { return salaAberta; }, fichaAberta: function () { return fichaAberta; }
   };

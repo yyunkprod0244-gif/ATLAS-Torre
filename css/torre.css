@@ -94,6 +94,13 @@ a.bt { text-decoration: none; }
 .pl-item span { font-size: 11px; color: var(--tinta-3); white-space: nowrap; }
 .pl-item b { font-size: 17px; font-weight: 600; }
 .util { display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 16px; }
+.pl-item b, .marca-sub, .relogio span { white-space: nowrap; }
+/* com os botões novos no topo, o placar mostra 3 números até 1560 px (a contagem de skills, que não muda, sai primeiro) */
+@media (max-width: 1560px) { .placar .pl-item:nth-child(2) { display: none; } .placar { padding: 6px 0; } .pl-item { padding: 2px 14px; } }
+.util-sep { width: 1px; height: 24px; background: var(--linha-forte); margin: 0 4px; flex: none; }
+.util .bt-icone { position: relative; }
+.contador { position: absolute; top: 2px; right: 1px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--gelo); color: #05070d; font: 600 10px/16px var(--mono); text-align: center; }
+.contador.atrasado { background: var(--critico); color: #fff; }
 .relogio { display: flex; flex-direction: column; line-height: 1.15; margin-right: 8px; text-align: right; }
 .relogio b { font: 500 16px var(--mono); }
 .relogio span { font-size: 11px; color: var(--tinta-3); white-space: nowrap; }
@@ -324,6 +331,9 @@ select option { background: var(--sup-2); }
 .ex-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
 .ex-topo b { font-size: 14px; font-weight: 600; }
 .ex-tipo { font-size: 11px; color: var(--tinta-3); }
+.tag.tag-instalada { background: color-mix(in srgb, var(--bom) 18%, transparent); color: var(--tinta-1); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bom) 55%, transparent); }
+.ex-local { font-size: 11.5px; color: var(--tinta-2); overflow-wrap: anywhere; }
+.ex-local code { font: 500 11px var(--mono); color: var(--tinta-1); }
 .ex-sala { font-size: 11px; color: var(--tinta-2); text-decoration: underline; text-underline-offset: 2px; }
 .ex-sala:hover { color: var(--tinta-1); }
 .ex-resumo { color: var(--tinta-1); line-height: 1.5; }
@@ -419,6 +429,14 @@ select option { background: var(--sup-2); }
 .fase-plano .licoes li { background: var(--sup-2); }
 .fp-meta { font-size: 12px; color: var(--tinta-2); line-height: 1.55; }
 .fp-meta b { color: var(--tinta-1); font-weight: 600; }
+.onde { display: flex; flex-direction: column; gap: 12px; }
+.onde h5 { margin: 0 0 6px; font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--tinta-3); }
+.onde ul { display: flex; flex-direction: column; gap: 4px; }
+.onde li { display: flex; flex-direction: column; gap: 1px; background: var(--sup-1); border: 1px solid var(--linha); border-radius: 8px; padding: 7px 10px; font-size: 12px; }
+.onde a { display: inline-flex; align-items: center; gap: 5px; color: var(--tinta-1); font-weight: 600; text-decoration: none; align-self: flex-start; }
+.onde a:hover { text-decoration: underline; }
+.onde a .ico { width: 13px; height: 13px; color: var(--tinta-3); }
+.onde span { color: var(--tinta-2); line-height: 1.4; }
 .numeros-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
 .numeros-form label { font-size: 11px; color: var(--tinta-2); display: flex; flex-direction: column; gap: 4px; }
 .numeros-form input { font-weight: 600; }
@@ -436,6 +454,46 @@ select option { background: var(--sup-2); }
 .passo b { font-weight: 500; }
 .passo small { color: var(--tinta-3); font-size: 11px; line-height: 1.4; }
 .passo:has(input:checked) b { color: var(--tinta-3); text-decoration: line-through; }
+
+/* ---------- lembretes (modal) ---------- */
+.modal-caixa.modal-ferramenta { width: min(620px, 100%); --cor: var(--gelo); }
+.modal-caixa.modal-calc { width: min(780px, 100%); }
+.modal-ferramenta .modal-corpo { display: flex; flex-direction: column; gap: 16px; }
+.form-lembrete { display: grid; grid-template-columns: 1fr 150px 110px; gap: 8px; align-items: end; }
+.form-lembrete label { font-size: 11.5px; color: var(--tinta-2); display: flex; flex-direction: column; gap: 5px; }
+.form-lembrete .inteiro { grid-column: 1 / -1; }
+.form-lembrete .bt { height: 36px; }
+.atalhos { display: flex; flex-wrap: wrap; gap: 6px; }
+.lembretes h4 { margin: 4px 0 6px; }
+.lembrete { display: flex; align-items: center; gap: 10px; background: var(--sup-1); border: 1px solid var(--linha); border-radius: 10px; padding: 8px 8px 8px 12px; font-size: 13px; }
+.lembrete + .lembrete { margin-top: 6px; }
+.lembrete.atrasado { border-color: color-mix(in srgb, var(--critico) 60%, transparent); }
+.lembrete.feito p { color: var(--tinta-3); text-decoration: line-through; }
+.lembrete div { flex: 1; min-width: 0; }
+.lembrete p { overflow-wrap: anywhere; }
+.lembrete time { font: 400 11px var(--mono); color: var(--tinta-3); }
+.lembrete .selo { margin-left: 6px; }
+/* ---------- calculadora (modal) ---------- */
+.calc { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.calc-visor { grid-column: 1 / -1; background: var(--plano); border: 1px solid var(--linha-forte); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.calc-visor input { height: auto; border: 0; background: transparent; padding: 0; font: 500 18px var(--mono); color: var(--tinta-2); box-shadow: none; }
+.calc-visor input:focus { box-shadow: none; }
+.calc-visor output { font: 600 30px var(--fonte); text-align: right; min-height: 38px; overflow-wrap: anywhere; }
+.calc-visor output.erro { font-size: 14px; color: var(--tinta-2); font-weight: 400; }
+.calc-teclas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.calc-teclas button { height: 44px; border-radius: 10px; background: var(--sup-2); border: 1px solid var(--linha); font: 500 17px var(--fonte); color: var(--tinta-1); }
+.calc-teclas button:hover { background: var(--sup-3); }
+.calc-teclas .op { color: var(--gelo); }
+.calc-teclas .igual { background: color-mix(in srgb, var(--gelo) 26%, var(--sup-2)); border-color: color-mix(in srgb, var(--gelo) 60%, transparent); }
+.calc-lado { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.calc-lado h4 { font-size: 12px; font-weight: 600; }
+.calc-rapida { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11.5px; color: var(--tinta-2); }
+.calc-rapida label { display: flex; flex-direction: column; gap: 4px; }
+.calc-rapida output { grid-column: 1 / -1; font-size: 12.5px; color: var(--tinta-1); background: var(--sup-1); border: 1px solid var(--linha); border-radius: 8px; padding: 6px 10px; }
+.calc-hist { display: flex; flex-direction: column; gap: 4px; font: 400 12px var(--mono); color: var(--tinta-2); }
+.calc-hist button { text-align: left; padding: 4px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+.calc-hist button:hover { background: var(--sup-2); color: var(--tinta-1); }
+@media (max-width: 700px) { .calc { grid-template-columns: 1fr; } .form-lembrete { grid-template-columns: 1fr 1fr; } }
 
 /* ---------- produtos da empresa (modal) ---------- */
 .modal-caixa.modal-produtos { width: min(1060px, 100%); --cor: var(--marca); }
@@ -608,7 +666,9 @@ select option { background: var(--sup-2); }
   .salario-form { grid-template-columns: 1fr; }
   .modal-caixa footer { flex-wrap: wrap; }
   :root { --borda: 10px; --trilho-w: 100%; }
-  .placar, .relogio, #btTela, .feed, .rotulos { display: none; }
+  .placar, .relogio, #btTela, #btQualidade, .util-sep, .feed, .rotulos { display: none; }
+  .util { overflow-x: auto; scrollbar-width: none; max-width: calc(100vw - 2 * var(--borda) - 160px); padding-left: 8px; }
+  .util > * { flex: none; }
   .topo { gap: 8px; }
   .marca { padding: 7px 14px 7px 10px; }
   .elevador { top: auto; bottom: var(--borda); left: var(--borda); right: 96px; transform: none; width: auto; flex-direction: row-reverse; justify-content: space-between; overflow-x: auto; padding: 6px; }

@@ -8,7 +8,9 @@
      index.html?semintro           pula a tela de entrada
      index.html?qualidade=leve     força o modo leve (sem brilho)
    Atalhos de teclado: 1–9 andares · 0 ou Esc volta · J Jarvis · M microfone ·
-                       R resumo do dia · P produtos · S skills externas
+                       R resumo do dia · P produtos · S skills externas ·
+                       L lembretes · C calculadora · D dashboard · H Jarvis holográfico
+     Endereços que já abrem uma janela: ?produtos · ?skills · ?lembretes · ?calculadora
    ========================================================================== */
 (function (root) {
   'use strict';
@@ -54,6 +56,7 @@
       abrirProdutos: UI.abrirProdutos,
       mostrarSkillExterna: function (id) { return UI.mostrarSkillExterna(id); },
       abrirSkillsExternas: UI.abrirSkillsExternas,
+      abrirLembretes: UI.abrirLembretes,
       abrirResumo: UI.abrirResumo,
       abrirAgente: function (n, i) { UI.abrirAgente(n, i); }
     });
@@ -91,7 +94,16 @@
       if (falar) setTimeout(function () { J.saudar(); }, 1200);
       if (params.has('jarvis')) J.abrir(true);
       if (params.has('produtos')) setTimeout(UI.abrirProdutos, 600);
+      if (params.has('skills')) setTimeout(UI.abrirSkillsExternas, 600);
+      if (params.has('lembretes')) setTimeout(UI.abrirLembretes, 600);
+      if (params.has('calculadora')) setTimeout(UI.abrirCalculadora, 600);
     }
+
+    /* ---------- lembretes: confere a cada 15 segundos se algum chegou na hora ---------- */
+    T.vigiarLembretes(function (l) {
+      UI.aviso('⏰ Lembrete: ' + l.texto);
+      J.falar('Lembrete: ' + l.texto);
+    });
     var linhas = ['Gerando ' + T.fmt.int(T.TOTAIS.agentes) + ' agentes em ' + NA + ' andares', 'Mobiliando ' + T.TOTAIS.salas + ' salas e carregando ' + T.fmt.int(T.TOTAIS.skills) + ' skills', 'Conectando o núcleo de dados ao Mega Brain', cena.vazia ? 'Torre 3D indisponível: abrindo os painéis' : 'Torre pronta'];
     var log = $('introLog'), barra = $('introBarra'), bt = $('introEntrar');
     $('introTotais').textContent = NA + ' andares · ' + T.TOTAIS.salas + ' salas · ' + T.fmt.int(T.TOTAIS.agentes) + ' agentes · ' + T.fmt.int(T.TOTAIS.skills) + ' skills';
@@ -126,6 +138,10 @@
       else if (e.key === 'r' || e.key === 'R') UI.abrirResumo();
       else if (e.key === 'p' || e.key === 'P') UI.abrirProdutos();
       else if (e.key === 's' || e.key === 'S') UI.abrirSkillsExternas();
+      else if (e.key === 'l' || e.key === 'L') UI.abrirLembretes();
+      else if (e.key === 'c' || e.key === 'C') UI.abrirCalculadora();
+      else if (e.key === 'd' || e.key === 'D') root.location.href = 'dashboard.html';
+      else if (e.key === 'h' || e.key === 'H') root.location.href = 'jarvis.html';
     });
   };
 })(window);
